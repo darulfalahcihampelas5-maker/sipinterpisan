@@ -315,18 +315,7 @@ import {
 
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationModal } from "../components/NotificationModal";
-import {
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts";
+import { AttendanceDonutChart } from "../components/AttendanceDonutChart";
 
 const MOCK_EXAMS = [
   {
@@ -6185,32 +6174,10 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
                     {/* Donut Chart Card */}
                     <div className="md:col-span-1 bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col items-center justify-center min-h-[400px]">
                       <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 mb-8 self-start">Distribusi Kehadiran</h3>
-                      <div className="w-full h-64 relative">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={attendanceChartData}
-                              cx="50%"
-                              cy="50%"
-                              innerRadius={60}
-                              outerRadius={80}
-                              paddingAngle={5}
-                              dataKey="value"
-                            >
-                              {attendanceChartData.map((entry: any, index: number) => (
-                                <Cell key={`att-pie-cell-${entry.name || index}-${index}`} fill={entry.color} />
-                              ))}
-                            </Pie>
-                            <Tooltip 
-                              contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                            />
-                          </PieChart>
-                        </ResponsiveContainer>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          <span className="text-3xl font-black text-slate-900">{attendanceSummary?.percentage}%</span>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase">Hadir</span>
-                        </div>
-                      </div>
+                      <AttendanceDonutChart
+                        data={attendanceChartData}
+                        centerPercentage={attendanceSummary?.percentage || 0}
+                      />
                       <div className="grid grid-cols-2 gap-x-8 gap-y-2 mt-6">
                         {attendanceChartData.map((entry: any, idx: number) => (
                           <div key={`att-legend-${entry.name || idx}-${idx}`} className="flex items-center gap-2">
