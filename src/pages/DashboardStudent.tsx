@@ -316,6 +316,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationModal } from "../components/NotificationModal";
 import { AttendanceDonutChart } from "../components/AttendanceDonutChart";
+import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
 
 const MOCK_EXAMS = [
   {
@@ -2898,7 +2899,7 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
     let nilaiUts = 0;
     let nilaiUas = 0;
 
-    const studentAssignments = assignmentsList.filter(a => !a.kelas || a.kelas === student.kelas || a.kelas === "Semua Kelas");
+    const studentAssignments = assignmentsList.filter(a => isAssignmentForClass(a, student.kelas));
     studentAssignments.forEach(a => {
       const sub = submissionsList.find(s => s.assignmentId === a.id && s.nisn === student.nisn);
       const fGrade = finalGradesList.find(f => f.assignmentId === a.id && f.nisn === student.nisn);
@@ -2910,7 +2911,7 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
       }
     });
 
-    const studentExams = examsList.filter(e => !e.kelas || e.kelas === student.kelas || e.kelas === "Semua Kelas");
+    const studentExams = examsList.filter(e => isExamForClass(e, student.kelas));
     studentExams.forEach(e => {
       const fGrade = finalGradesList.find(f => (f.alignmentId === e.id || f.assignmentId === e.id) && f.nisn === student.nisn);
       if (fGrade?.nilai !== undefined && fGrade?.nilai !== null && fGrade?.nilai !== "") {

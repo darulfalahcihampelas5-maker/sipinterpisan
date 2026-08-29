@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "motion/react";
 import { User, X } from "lucide-react";
 import { getDriveImageUrl } from "../../lib/driveUtils";
+import { isAssignmentForClass, isExamForClass } from "../../lib/gradeUtils";
 
 interface StudentProfileModalProps {
   selectedStudentProfile: any;
@@ -112,7 +113,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                   (s) => s.nisn === selectedStudentProfile.nisn
                 );
                 const studentAssignments = assignmentsList.filter(
-                  (a) => a.kelasRef === selectedStudentProfile.kelas
+                  (a) => isAssignmentForClass(a, selectedStudentProfile.kelas)
                 );
 
                 if (studentAssignments.length === 0) {
@@ -197,14 +198,8 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               </h4>
               {(() => {
                 const studentExams = examsList.filter((e) => {
-                  const isCorrectClass =
-                    e.kelasRef === selectedStudentProfile.kelas ||
-                    (e.targets &&
-                      e.targets.some(
-                        (t: any) => t.kelas === selectedStudentProfile.kelas
-                      ));
-                  const isSubjectInformatika =
-                    e.subject?.toLowerCase() === "informatika";
+                  const isCorrectClass = isExamForClass(e, selectedStudentProfile.kelas);
+                  const isSubjectInformatika = !e.subject || e.subject.toLowerCase().includes("informatika");
                   return isCorrectClass && isSubjectInformatika;
                 });
 

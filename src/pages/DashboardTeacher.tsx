@@ -98,6 +98,7 @@ import { ZoomPhotoModal } from "../components/teacher/ZoomPhotoModal";
 import { WhatsAppShareModal } from "../components/teacher/WhatsAppShareModal";
 import { StudentProfileModal } from "../components/teacher/StudentProfileModal";
 import { LogoutModal } from "../components/teacher/LogoutModal";
+import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
 
 const trackUsage = (reads = 0, writes = 0) => {
   try {
@@ -2459,14 +2460,16 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
   };
 
   const calculateNilaiRapor = (stu: any) => {
-    const { total, persentase } = getStudentAbsensiCounts(stu, absensiList, selectedClassFilter || stu.kelas);
+    const targetClass = selectedClassFilter || stu.kelas;
+    const { total, persentase } = getStudentAbsensiCounts(stu, absensiList, targetClass);
     const nilaiKehadiran = total > 0 ? persentase : 100;
 
     const tugasVals: number[] = [];
     let utsVal = 0;
     let uasVal = 0;
 
-    assignmentsList.forEach((a) => {
+    const validAssignments = assignmentsList.filter((a) => isAssignmentForClass(a, targetClass));
+    validAssignments.forEach((a) => {
       const sub = submissionsList.find((s) => s.assignmentId === a.id && s.nisn === stu.nisn);
       const fGrade = finalGradesList.find((f) => f.assignmentId === a.id && f.nisn === stu.nisn);
       const cellKey = `${a.id}_${stu.nisn}`;
@@ -2479,7 +2482,8 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
       }
     });
 
-    examsList.forEach((e) => {
+    const validExams = examsList.filter((e) => isExamForClass(e, targetClass));
+    validExams.forEach((e) => {
       const fGrade = finalGradesList.find(
         (f) => (f.alignmentId === e.id || f.assignmentId === e.id) && f.nisn === stu.nisn
       );
@@ -2569,15 +2573,18 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
     doc.text(currentDateStrString, 463, currentY);
     currentY += 25;
 
-    // Prepare Dynamic Headers
+    // Prepare Dynamic Headers - filtered by published class
+    const filteredAssignmentsForPDF = assignmentsList.filter((a) => isAssignmentForClass(a, selectedClassFilter));
+    const filteredExamsForPDF = examsList.filter((e) => isExamForClass(e, selectedClassFilter));
+
     const sortedEvaluations = [
-      ...assignmentsList.map((a) => ({
+      ...filteredAssignmentsForPDF.map((a) => ({
         id: a.id,
         title: a.materi || "Tugas",
         type: "assignment",
         date: a.publishedAt || a.createdAt,
       })),
-      ...examsList.map((e) => ({
+      ...filteredExamsForPDF.map((e) => ({
         id: e.id,
         title: e.title || "Ujian",
         type: "exam",
@@ -3035,18 +3042,21 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
       const workbook = new ExcelJS.default.Workbook();
       const worksheet = workbook.addWorksheet("Rekap_Nilai");
 
+      const filteredAssignmentsForExcel = assignmentsList.filter((a) => isAssignmentForClass(a, selectedClassFilter));
+      const filteredExamsForExcel = examsList.filter((e) => isExamForClass(e, selectedClassFilter));
+
       const sortedEvaluations = [
-        ...assignmentsList.map((a) => ({
+        ...filteredAssignmentsForExcel.map((a) => ({
           id: a.id,
-          title: a.title,
+          title: a.materi || a.title || "Tugas",
           type: "assignment" as const,
-          dueDate: a.dueDate,
+          dueDate: a.deadline || a.publishedAt || a.createdAt,
         })),
-        ...examsList.map((e) => ({
+        ...filteredExamsForExcel.map((e) => ({
           id: e.id,
-          title: e.title,
+          title: e.title || "Ujian",
           type: "exam" as const,
-          dueDate: e.startTime,
+          dueDate: e.createdAt,
         })),
       ].sort((a, b) => {
         const dateA = a.dueDate?.toDate?.() || new Date(a.dueDate);
@@ -7247,22 +7257,25 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                       Nilai Kehadiran
                                     </th>
                                     {(() => {
+const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a, selectedClassFilter));
+                                      const filteredExams = examsList.filter((e) => isExamForClass(e, selectedClassFilter));
+
                                       const mergedCols = [
-                                        ...assignmentsList.map((a) => ({
+                                        ...filteredAssignments.map((a) => ({
                                           id: a.id,
                                           title: a.materi,
                                           type: "assignment",
                                           date: a.publishedAt || a.createdAt,
                                           deadline: a.deadline,
                                         })),
-                                        ...examsList.map((e) => ({
+                                        ...filteredExams.map((e) => ({
                                           id: e.id,
                                           title: e.title,
                                           type: "exam",
                                           date: e.createdAt,
                                           deadline: null,
                                         })),
-                                      ].sort((a, b) => {
+].sort((a, b) => {
                                         const dateA = a.date ? new Date(a.date).getTime() : 0;
                                         const dateB = b.date ? new Date(b.date).getTime() : 0;
                                         return dateA - dateB;
@@ -7374,20 +7387,26 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                             })()}
                                           </td>
                                           {(() => {
+const targetCls = selectedClassFilter || stu.kelas;
+                                            const filteredAssignmentsForStu = assignmentsList.filter((a) => isAssignmentForClass(a, targetCls));
+                                            const filteredExamsForStu = examsList.filter((e) => isExamForClass(e, targetCls));
+
                                             const mergedColsForStu = [
-                                              ...assignmentsList.map((a) => ({
+                                              ...filteredAssignmentsForStu.map((a) => ({
                                                 id: a.id,
                                                 title: a.materi,
                                                 type: "assignment",
                                                 date: a.publishedAt || a.createdAt,
+                                                deadline: a.deadline,
                                               })),
-                                              ...examsList.map((e) => ({
+                                              ...filteredExamsForStu.map((e) => ({
                                                 id: e.id,
                                                 title: e.title,
                                                 type: "exam",
                                                 date: e.createdAt,
+                                                deadline: null,
                                               })),
-                                            ].sort((a, b) => {
+].sort((a, b) => {
                                               const dateA = a.date ? new Date(a.date).getTime() : 0;
                                               const dateB = b.date ? new Date(b.date).getTime() : 0;
                                               return dateA - dateB;
