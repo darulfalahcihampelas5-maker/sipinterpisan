@@ -97,6 +97,7 @@ import { NotificationModal } from "../components/NotificationModal";
 import { ZoomPhotoModal } from "../components/teacher/ZoomPhotoModal";
 import { WhatsAppShareModal } from "../components/teacher/WhatsAppShareModal";
 import { StudentProfileModal } from "../components/teacher/StudentProfileModal";
+import { LogoutModal } from "../components/teacher/LogoutModal";
 
 const trackUsage = (reads = 0, writes = 0) => {
   try {
@@ -4441,7 +4442,8 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
         <div className="p-6">
           <div className="rounded-xl border-t border-sky-600 p-5 mt-auto">
             <button
-              onClick={handleLogout}
+              type="button"
+              onClick={() => setShowLogoutModal(true)}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-5 text-sm font-black text-white uppercase tracking-widest hover:bg-red-700 shadow-xl shadow-red-900/20 active:scale-95 transition-all cursor-pointer"
             >
               <LogOut className="h-5 w-5" />
@@ -4700,7 +4702,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                         <button
                           onClick={() => {
                             setShowProfileDropdown(false);
-                            handleLogout();
+                            setShowLogoutModal(true);
                           }}
                           className="flex items-center gap-3 w-full px-4 py-3 text-xs font-bold text-rose-600 bg-rose-50/50 hover:bg-rose-100 hover:text-rose-700 rounded-2xl cursor-pointer transition-all text-left uppercase tracking-wider"
                         >
@@ -9235,6 +9237,13 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
         examsList={examsList}
         finalGradesList={finalGradesList}
         getAssignmentPublishedAtForTeacher={getAssignmentPublishedAtForTeacher}
+      />
+
+      {/* Logout Confirmation Modal */}
+      <LogoutModal
+        isOpen={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogout}
       />
     </div>
   );
