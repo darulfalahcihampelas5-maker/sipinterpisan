@@ -17,6 +17,7 @@ import {
   Send,
   AlertCircle,
   HelpCircle,
+  Check,
 } from "lucide-react";
 import { getDriveImageUrl, getDrivePdfEmbedUrl } from "../../lib/driveUtils";
 
@@ -55,6 +56,7 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
 }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [rotation, setRotation] = useState(0);
+  const [justUsedSuggested, setJustUsedSuggested] = useState(false);
 
   if (!isOpen || !submission) return null;
 
@@ -79,6 +81,7 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
       /\.pdf($|\?)/i.test(fileUrl) ||
       (fileUrl.includes("drive.google.com") && !isImage));
 
+  const suggestedScore = submission?.suggestedGrade || "100";
   const quickGrades = [100, 95, 90, 85, 80, 75];
   const quickRejectionReasons = [
     "Foto hasil tugas kurang jelas / buram, mohon foto ulang.",
@@ -99,6 +102,23 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const handleApplySuggested = () => {
+    const scoreToUse = String(suggestedScore || "100");
+    setGradeValue(scoreToUse);
+    setJustUsedSuggested(true);
+    setTimeout(() => {
+      setJustUsedSuggested(false);
+    }, 2000);
+  };
+
+  const handleExecuteAcceptAndGrade = () => {
+    const finalScore = gradeValue || String(suggestedScore || "100");
+    if (!gradeValue) {
+      setGradeValue(finalScore);
+    }
+    onSaveGrade("sudah dinilai");
   };
 
   return (
@@ -137,8 +157,9 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
           <div className="flex items-center gap-2 shrink-0">
             <button
               id="btn-toggle-fullscreen-audit"
+              type="button"
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all"
+              className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-xl transition-all cursor-pointer"
               title={isFullscreen ? "Kecilkan Tampilan" : "Tampilan Penuh (Fullscreen)"}
             >
               {isFullscreen ? (
@@ -149,8 +170,9 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
             </button>
             <button
               id="btn-close-audit-modal"
+              type="button"
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
               title="Tutup Modal"
             >
               <X className="w-5 h-5" />
@@ -167,6 +189,7 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
               <div className="flex items-center gap-3.5 min-w-0">
                 {student?.profilePhotoUrl ? (
                   <button
+                    type="button"
                     onClick={() => {
                       if (onZoomPhoto && student.profilePhotoUrl) {
                         onZoomPhoto(
@@ -258,8 +281,9 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
                   <div className="flex items-center gap-1">
                     {isImage && (
                       <button
+                        type="button"
                         onClick={handleRotate}
-                        className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg border border-slate-200 flex items-center gap-1 shadow-xs transition-colors"
+                        className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg border border-slate-200 flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
                         title="Putar Gambar 90 Derajat"
                       >
                         <RotateCw className="w-3 h-3" />
@@ -267,8 +291,9 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
                       </button>
                     )}
                     <button
+                      type="button"
                       onClick={handleDownload}
-                      className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg border border-slate-200 flex items-center gap-1 shadow-xs transition-colors"
+                      className="px-2 py-1 bg-white hover:bg-slate-100 text-slate-600 text-[10px] font-bold rounded-lg border border-slate-200 flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
                       title="Unduh Berkas"
                     >
                       <Download className="w-3 h-3" />
@@ -368,28 +393,30 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
             {/* Mode Selector Tabs */}
             <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
               <button
+                id="tab-mode-accept"
                 type="button"
                 onClick={() => setIsRejecting(false)}
-                className={`py-2.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                className={`py-2.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   !isRejecting
                     ? "bg-[#85cc00] text-slate-950 shadow-sm"
                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
-                Terima & Beri Nilai
+                Mode: Terima & Nilai
               </button>
               <button
+                id="tab-mode-reject"
                 type="button"
                 onClick={() => setIsRejecting(true)}
-                className={`py-2.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                className={`py-2.5 text-xs font-black rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   isRejecting
                     ? "bg-rose-600 text-white shadow-sm"
                     : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
                 }`}
               >
                 <AlertTriangle className="w-4 h-4" />
-                Tolak / Minta Revisi
+                Mode: Tolak & Revisi
               </button>
             </div>
 
@@ -397,28 +424,35 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
               /* ACCEPT & GRADE SECTION */
               <div className="space-y-4 flex-1 flex flex-col">
                 {/* Suggested Auto-Grade Banner */}
-                {submission.suggestedGrade && (
-                  <div className="p-3.5 bg-[#85cc00]/15 border border-[#85cc00]/30 rounded-xl flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Sparkles className="w-5 h-5 text-[#558300] shrink-0" />
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-black uppercase text-slate-800 block">
-                          Saran Nilai Ketepatan Waktu:
-                        </span>
-                        <span className="text-lg font-mono font-black text-[#436800]">
-                          {submission.suggestedGrade} Poin
-                        </span>
-                      </div>
+                <div className="p-3.5 bg-[#85cc00]/15 border border-[#85cc00]/30 rounded-xl flex items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Sparkles className="w-5 h-5 text-[#558300] shrink-0" />
+                    <div className="min-w-0">
+                      <span className="text-[11px] font-black uppercase text-slate-800 block">
+                        Saran Nilai Ketepatan Waktu:
+                      </span>
+                      <span className="text-lg font-mono font-black text-[#436800]">
+                        {suggestedScore} Poin
+                      </span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setGradeValue(submission.suggestedGrade)}
-                      className="px-3 py-1.5 bg-[#85cc00] hover:brightness-110 text-slate-950 text-[10px] font-black uppercase tracking-wider rounded-lg shadow-xs transition-all shrink-0"
-                    >
-                      Gunakan
-                    </button>
                   </div>
-                )}
+                  <button
+                    id="btn-use-suggested-grade"
+                    type="button"
+                    onClick={handleApplySuggested}
+                    className="px-3.5 py-2 bg-[#85cc00] hover:brightness-110 active:scale-95 text-slate-950 text-xs font-black uppercase tracking-wider rounded-xl shadow-xs transition-all shrink-0 cursor-pointer flex items-center gap-1.5"
+                    title="Gunakan rekomendasi nilai ini"
+                  >
+                    {justUsedSuggested ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-slate-950" />
+                        Diterapkan
+                      </>
+                    ) : (
+                      "Gunakan"
+                    )}
+                  </button>
+                </div>
 
                 {/* Score Input Box */}
                 <div>
@@ -431,7 +465,7 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
                       type="number"
                       min="0"
                       max="100"
-                      placeholder="Contoh: 90"
+                      placeholder="Contoh: 100"
                       value={gradeValue}
                       onChange={(e) => setGradeValue(e.target.value)}
                       className="w-full text-center py-4 px-4 text-3xl font-mono font-black text-slate-900 bg-slate-50 border-2 border-slate-200 rounded-2xl focus:border-[#85cc00] focus:ring-4 focus:ring-[#85cc00]/20 outline-none transition-all"
@@ -453,7 +487,7 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
                         key={val}
                         type="button"
                         onClick={() => setGradeValue(val.toString())}
-                        className={`py-2 px-3 rounded-xl font-mono text-sm font-black border transition-all ${
+                        className={`py-2 px-3 rounded-xl font-mono text-sm font-black border transition-all cursor-pointer ${
                           gradeValue === val.toString()
                             ? "bg-[#85cc00] text-slate-950 border-[#85cc00] shadow-sm scale-[1.02]"
                             : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
@@ -465,13 +499,14 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
                   </div>
                 </div>
 
+                {/* Primary Action Button: Terima dan Beri Nilai */}
                 <div className="mt-auto pt-4 border-t border-slate-100">
                   <button
                     id="btn-save-grade-accept"
                     type="button"
-                    disabled={isSavingGrade || !gradeValue}
-                    onClick={() => onSaveGrade("sudah dinilai")}
-                    className="w-full py-4 bg-[#85cc00] hover:brightness-110 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-[#85cc00]/25 transition-all flex items-center justify-center gap-2"
+                    disabled={isSavingGrade}
+                    onClick={handleExecuteAcceptAndGrade}
+                    className="w-full py-4 bg-[#85cc00] hover:brightness-110 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-sm uppercase tracking-wider rounded-2xl shadow-lg shadow-[#85cc00]/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {isSavingGrade ? (
                       <span className="inline-flex items-center gap-2">
@@ -480,8 +515,8 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
                       </span>
                     ) : (
                       <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        Simpan & Rilis Nilai ({gradeValue || "0"})
+                        <CheckCircle2 className="w-5 h-5" />
+                        Terima dan Beri Nilai ({gradeValue || String(suggestedScore || "100")})
                       </>
                     )}
                   </button>
@@ -527,7 +562,7 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
                         key={idx}
                         type="button"
                         onClick={() => setFeedbackReason(reason)}
-                        className="w-full text-left p-2.5 rounded-xl text-[11px] font-medium bg-slate-50 hover:bg-rose-50/60 hover:text-rose-900 border border-slate-200 hover:border-rose-200 transition-colors block text-slate-700"
+                        className="w-full text-left p-2.5 rounded-xl text-[11px] font-medium bg-slate-50 hover:bg-rose-50/60 hover:text-rose-900 border border-slate-200 hover:border-rose-200 transition-colors block text-slate-700 cursor-pointer"
                       >
                         • {reason}
                       </button>
@@ -541,7 +576,7 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
                     type="button"
                     disabled={isSavingGrade || !feedbackReason.trim()}
                     onClick={() => onSaveGrade("ditolak")}
-                    className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-rose-600/25 transition-all flex items-center justify-center gap-2"
+                    className="w-full py-4 bg-rose-600 hover:bg-rose-700 active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest rounded-2xl shadow-lg shadow-rose-600/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
                     {isSavingGrade ? (
                       <span className="inline-flex items-center gap-2">
@@ -551,7 +586,7 @@ export const AuditSubmissionModal: React.FC<AuditSubmissionModalProps> = ({
                     ) : (
                       <>
                         <Send className="w-4 h-4" />
-                        Kirim Penolakan / Minta Revisi
+                        Kirim Penolakan & Minta Revisi
                       </>
                     )}
                   </button>

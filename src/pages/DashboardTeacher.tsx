@@ -991,16 +991,12 @@ export default function DashboardTeacher() {
     const assignment = assignmentsList.find(
       (a) => a.id === submission.assignmentId,
     );
-    let calculatedGrade = "";
-    let autoGraded = false;
+    let calculatedGrade = "100";
 
-    if (assignment && !submission.nilai) {
-      // Logic based on publication date (publishedAt or createdAt)
-      // Day 1 (tanggal Tugas terbit) = 100
-      // Day 2 = 95, Day 3 = 90, Day 4 = 85, Day 5 = 80, Day 6 = 75, Day 7+ = 75
+    if (assignment) {
       const target = assignment.targets?.find((t: any) => t.kelas === submission.kelas);
       const rawPubDate = target?.publishedAt || assignment.publishedAt || assignment.createdAt;
-      if (rawPubDate) {
+      if (rawPubDate && submission.submittedAt) {
         const publishedDate = new Date(rawPubDate);
         publishedDate.setHours(0, 0, 0, 0);
 
@@ -1012,15 +1008,18 @@ export default function DashboardTeacher() {
 
         const score = 100 - diffDays * 5;
         calculatedGrade = Math.max(75, score).toString();
-        autoGraded = true;
       }
     }
 
+    const initialScore = submission.nilai !== undefined && submission.nilai !== null
+      ? String(submission.nilai)
+      : calculatedGrade;
+
     setSelectedSubmission({
       ...submission,
-      suggestedGrade: autoGraded ? calculatedGrade : null,
+      suggestedGrade: calculatedGrade,
     });
-    setGradeValue(submission.nilai || calculatedGrade);
+    setGradeValue(initialScore);
     setFeedbackReason(submission.keterangan || "");
     setIsRejecting(false);
     setIsGradingModalOpen(true);
@@ -1118,11 +1117,13 @@ export default function DashboardTeacher() {
     status: "sudah dinilai" | "ditolak",
   ) => {
     if (!selectedSubmission) return;
-    if (status === "sudah dinilai" && !gradeValue) {
-      showAlert("Validasi", "Mohon masukkan nilai sebelum menyimpan.", "alert");
+    const finalScore = Number(gradeValue || selectedSubmission.suggestedGrade || 100);
+
+    if (status === "sudah dinilai" && isNaN(finalScore)) {
+      showAlert("Validasi", "Mohon masukkan nilai angka yang valid sebelum menyimpan.", "alert");
       return;
     }
-    if (status === "ditolak" && !feedbackReason) {
+    if (status === "ditolak" && !feedbackReason.trim()) {
       showAlert("Validasi", "Mohon berikan alasan penolakan untuk siswa.", "alert");
       return;
     }
@@ -1130,38 +1131,50 @@ export default function DashboardTeacher() {
     setIsSavingGrade(true);
     try {
       if (status === "sudah dinilai") {
-        // 1. Create final grade entry
-        await setDoc(doc(collection(db, "final_grades")), {
-          assignmentId: selectedSubmission.assignmentId,
-          nisn: selectedSubmission.nisn || "",
-          nilai: Number(gradeValue),
-          gradedAt: new Date().toISOString(),
-        });
+        const fgId = `${selectedSubmission.assignmentId}_${selectedSubmission.nisn || ""}`;
+        // 1. Create/Update final grade entry with deterministic ID
+        await setDoc(
+          doc(db, "final_grades", fgId),
+          {
+            id: fgId,
+            assignmentId: selectedSubmission.assignmentId,
+            nisn: selectedSubmission.nisn || "",
+            nilai: finalScore,
+            gradedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+
         // 2. Update submission entry: update status, nilai, remove fileUrl to save space
         await setDoc(
           doc(db, "submissions", selectedSubmission.id),
           {
-            status,
-            nilai: Number(gradeValue),
-            fileUrl: null, // Clear large image data
-            keterangan: "",
+            status: "sudah dinilai",
+            nilai: finalScore,
+            fileUrl: null, // Clear large image data to optimize storage
+            keterangan: feedbackReason || "",
             gradedAt: new Date().toISOString(),
           },
           { merge: true },
         );
+        trackUsage(0, 2);
+        showAlert("Berhasil", `Nilai ${finalScore} berhasil disimpan dan diterbitkan untuk siswa.`, "alert");
       } else {
-        // Update submission status
+        // Update submission status for rejection
         await setDoc(
           doc(db, "submissions", selectedSubmission.id),
           {
-            status,
+            status: "ditolak",
             nilai: null,
-            keterangan: feedbackReason,
+            keterangan: feedbackReason.trim(),
             wasRejected: true,
             gradedAt: new Date().toISOString(),
           },
           { merge: true },
         );
+        trackUsage(0, 1);
+        showAlert("Tugas Ditolak", "Status penolakan & catatan revisi berhasil dikirim ke siswa.", "alert");
       }
 
       setIsGradingModalOpen(false);
