@@ -58,7 +58,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
               </h3>
               <div className="flex flex-wrap gap-2 items-center mt-2">
                 <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-white border border-slate-200 rounded-md text-slate-600">
-                  NISN: {selectedStudentProfile.nisn}
+                  NIS: {selectedStudentProfile.nisn}
                 </span>
                 <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-[#85cc00]/20 border border-[#85cc00]/30 rounded-md text-slate-800">
                   Kelas: {selectedStudentProfile.kelas || "-"}

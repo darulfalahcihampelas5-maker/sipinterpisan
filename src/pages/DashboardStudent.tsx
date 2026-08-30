@@ -1488,7 +1488,7 @@ export default function DashboardStudent() {
 
 Disampaikan Kepada Yth. Bapak/Ibu Orang Tua/Wali dari:
 • *Nama Siswa:* ${student.displayName}
-• *NISN:* ${student.nisn}
+• *NIS:* ${student.nisn}
 • *Kelas:* ${student.kelas}
 
 *1. RINGKASAN KEHADIRAN (PRESENSI)*
@@ -9073,7 +9073,7 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
                   <p className="font-bold text-sm text-slate-900">{student?.displayName}</p>
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">NISN / Kelas</label>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">NIS / Kelas</label>
                   <p className="font-bold text-sm text-slate-900">{student?.nisn} (Kl. {student?.kelas || "-"})</p>
                 </div>
               </div>

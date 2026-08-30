@@ -54,7 +54,7 @@ export const WhatsAppShareModal: React.FC<WhatsAppShareModalProps> = ({
               <p className="font-bold text-sm text-slate-900">{waStudent.displayName || waStudent.studentName}</p>
             </div>
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">NISN / Kelas</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">NIS / Kelas</label>
               <p className="font-bold text-sm text-slate-900">{waStudent.nisn} (Kl. {waStudent.kelas || "-"})</p>
             </div>
           </div>

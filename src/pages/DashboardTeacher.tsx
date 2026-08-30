@@ -404,7 +404,6 @@ export default function DashboardTeacher() {
 
   const [selectedStudentProfile, setSelectedStudentProfile] = useState<any>(null);
   const [studentProfileTab, setStudentProfileTab] = useState<"tugas" | "ujian">("tugas");
-  const [viewingStudentPhoto, setViewingStudentPhoto] = useState<any | null>(null);
   const [copiedAccessCode, setCopiedAccessCode] = useState<string | null>(null);
   const [studentSearchQuery, setStudentSearchQuery] = useState("");
   const [studentClassFilter, setStudentClassFilter] = useState("SEMUA_KELAS");
@@ -1233,13 +1232,13 @@ export default function DashboardTeacher() {
       if (!hasName || !hasNisn || !hasKelas) {
         const missing = [];
         if (!hasName) missing.push("Nama / Nama Lengkap");
-        if (!hasNisn) missing.push("NISN / No Induk");
+        if (!hasNisn) missing.push("NIS / No Induk");
         if (!hasKelas) missing.push("Kelas");
         
         // Dapatkan nama kolom yang terdeteksi di Excel untuk membantu pemecahan masalah pengguna
         const currentHeaders = Object.keys(sampleRow).join(", ");
         setSaveMessage({
-          text: `Format Salah: Kolom wajib tidak dikenali! Kolom di Excel Anda: [${currentHeaders}]. Kolom wajib yang tidak ditemukan: [${missing.join(", ")}]. Silakan ubah judul kolom di Excel Anda menjadi "Nama", "NISN", "Kelas", dan "Kode Akses".`,
+          text: `Format Salah: Kolom wajib tidak dikenali! Kolom di Excel Anda: [${currentHeaders}]. Kolom wajib yang tidak ditemukan: [${missing.join(", ")}]. Silakan ubah judul kolom di Excel Anda menjadi "Nama", "NIS", "Kelas", dan "Kode Akses".`,
           type: "error",
         });
         e.target.value = "";
@@ -1297,7 +1296,7 @@ export default function DashboardTeacher() {
 
       if (successCount === 0) {
         setSaveMessage({
-          text: "Peringatan: Format tabel tidak sesuai! Pastikan terdapat kolom: Nama, NISN, Kelas, dan Kode Akses.",
+          text: "Peringatan: Format tabel tidak sesuai! Pastikan terdapat kolom: Nama, NIS, Kelas, dan Kode Akses.",
           type: "error",
         });
       } else if (failedCount > 0) {
@@ -1880,7 +1879,7 @@ export default function DashboardTeacher() {
 
 Disampaikan Kepada Yth. Bapak/Ibu Orang Tua/Wali dari:
 • *Nama Siswa:* ${stu.displayName || stu.studentName}
-• *NISN:* ${stu.nisn}
+• *NIS:* ${stu.nisn}
 • *Kelas:* ${stu.kelas || "-"}
 
 *1. RINGKASAN KEHADIRAN (PRESENSI)*
@@ -2298,7 +2297,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
     }
 
     const confirmRun = confirm(
-      `Jalankan Pembersihan Retensi (Option 3)?\n\nDitemukan ${gradedSubmissionsWithFiles.length} berkas tugas yang sudah dinilai.\n\nSistem akan membersihkan beban file berkas lama dari Firebase Storage dan tetap menyimpan 100% DATA NILAI, NAMA SISWA, NISN, KELAS, TANGGAL, dan CATATAN GURU secara permanen di database.`
+      `Jalankan Pembersihan Retensi (Option 3)?\n\nDitemukan ${gradedSubmissionsWithFiles.length} berkas tugas yang sudah dinilai.\n\nSistem akan membersihkan beban file berkas lama dari Firebase Storage dan tetap menyimpan 100% DATA NILAI, NAMA SISWA, NIS, KELAS, TANGGAL, dan CATATAN GURU secara permanen di database.`
     );
 
     if (!confirmRun) return;
@@ -2598,7 +2597,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
 
     const tableHeaders = [
       "No",
-      "NISN",
+      "NIS",
       "Nama Siswa",
       "Kelas",
       "Nilai Kehadiran",
@@ -2879,7 +2878,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
 
       const tableHeaders = [
         "No", 
-        "NIS / NISN", 
+        "NIS", 
         "Nama Lengkap", 
         "Kelas", 
         "Nilai Asal", 
@@ -3066,7 +3065,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
 
       const headers = [
         "No",
-        "NISN",
+        "NIS",
         "Nama Siswa",
         "Kelas",
         "Nilai Kehadiran",
@@ -3169,7 +3168,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
       // Column widths
       const colWidths = [
         { width: 5 },  // No
-        { width: 15 }, // NISN
+        { width: 15 }, // NIS
         { width: 30 }, // Nama
         { width: 10 }, // Kelas
         { width: 15 }, // Nilai Kehadiran
@@ -3654,7 +3653,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
     // Validasi NISN (9 digits only for demo purposes)
     if (!/^\d{9}$/.test(studentNisn)) {
       setSaveMessage({
-        text: "NISN harus terdiri dari 9 angka",
+        text: "NIS harus terdiri dari 9 angka",
         type: "error",
       });
       return;
@@ -3664,7 +3663,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
     const studentExists = studentsList.some((s) => s.nisn === studentNisn);
     if (studentExists) {
       setSaveMessage({
-        text: "Maaf, NISN sudah digunakan oleh siswa lain.",
+        text: "Maaf, NIS sudah digunakan oleh siswa lain.",
         type: "error",
       });
       return;
@@ -5131,7 +5130,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                     <option value="">Pilih Kelas</option>
                                     {classesList.map((c, idx) => <option key={`opt-stu-cls-${c.id || c.name || idx}-${idx}`} value={c.name}>{c.name}</option>)}
                                   </select>
-                                  <input type="text" placeholder="NIS/NISN" value={studentNisn} onChange={(e) => setStudentNisn(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#85cc00] focus:border-[#85cc00] outline-none transition-all" />
+                                  <input type="text" placeholder="NIS" value={studentNisn} onChange={(e) => setStudentNisn(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#85cc00] focus:border-[#85cc00] outline-none transition-all" />
                                   <input type="text" placeholder="Kode Akses" value={studentAccessCode} onChange={(e) => setStudentAccessCode(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#85cc00] focus:border-[#85cc00] outline-none transition-all" />
                                   <button onClick={handleSimpanSiswa} disabled={isSaving} className="bg-[#85cc00] hover:bg-[#74b300] text-white p-3 rounded-xl w-full font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
                                     {isSaving ? (
@@ -5271,7 +5270,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                   <input
                                     id="student-search"
                                     type="text"
-                                    placeholder="Ketik Nama Lengkap, NISN, atau Kelas..."
+                                    placeholder="Ketik Nama Lengkap, NIS, atau Kelas..."
                                     value={studentSearchQuery}
                                     onChange={(e) => setStudentSearchQuery(e.target.value)}
                                     className="w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#85cc00] focus:border-[#85cc00] outline-none transition-all placeholder:text-slate-400 text-slate-900 shadow-sm h-[42px]"
@@ -5313,7 +5312,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                   <th className="py-3 px-3 border border-slate-200 text-center w-12 bg-slate-50">No</th>
                                   <th className="py-3 px-3 border border-slate-200 text-center w-24 bg-slate-50">Poto Siswa</th>
                                   <th className="py-3 px-3 border border-slate-200 bg-slate-50 min-w-[180px]">Nama Lengkap Siswa</th>
-                                  <th className="py-3 px-3 border border-slate-200 text-center w-36 bg-slate-50">NISN</th>
+                                  <th className="py-3 px-3 border border-slate-200 text-center w-36 bg-slate-50">NIS</th>
                                   <th className="py-3 px-3 border border-slate-200 text-center w-32 bg-slate-50">Kelas</th>
                                   <th className="py-3 px-3 border border-slate-200 text-center w-36 bg-slate-50">Kode Akses</th>
                                   <th className="py-3 px-3 border border-slate-200 text-center w-40 bg-slate-50">Opsi (Edit dan Hapus)</th>
@@ -5356,9 +5355,17 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                     <td className="py-2.5 px-3 border border-slate-200 text-center">
                                       <div className="flex justify-center items-center">
                                         <button 
-                                          onClick={() => setViewingStudentPhoto(student)}
-                                          className="w-9 h-9 rounded-full overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-transform group"
-                                          title="Klik untuk memperbesar"
+                                          onClick={() => {
+                                            if (student.profilePhotoUrl) {
+                                              setZoomedPhotoUrl(getDriveImageUrl(student.profilePhotoUrl));
+                                              setZoomedStudentName(student.displayName || "Foto Siswa");
+                                            }
+                                          }}
+                                          disabled={!student.profilePhotoUrl}
+                                          className={`w-9 h-9 rounded-full overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center transition-transform group ${
+                                            student.profilePhotoUrl ? "cursor-pointer hover:scale-105 active:scale-95" : "cursor-default"
+                                          }`}
+                                          title={student.profilePhotoUrl ? "Klik untuk memperbesar" : "Belum ada foto"}
                                         >
                                           {student.profilePhotoUrl ? (
                                             <img loading="lazy" 
@@ -5833,7 +5840,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                       <td className="py-6 px-8 whitespace-nowrap">
                                         <div>
                                           <p className="font-bold text-slate-900 whitespace-nowrap">{data.displayName}</p>
-                                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">NISN: {data.nisn}</p>
+                                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">NIS: {data.nisn}</p>
                                         </div>
                                       </td>
                                       <td className="py-6 px-8">
@@ -6549,7 +6556,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                               <div className="relative group">
                                 <input
                                   type="text"
-                                  placeholder="Ketik nama atau NISN..."
+                                  placeholder="Ketik nama atau NIS..."
                                   value={selectedStudentSearchFilter}
                                   onChange={(e) =>
                                     setSelectedStudentSearchFilter(e.target.value)
@@ -6713,9 +6720,14 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                             <div className="flex items-center gap-4">
                                               {student?.profilePhotoUrl ? (
                                                 <button 
-                                                  onClick={() => setViewingStudentPhoto(student)}
-                                                  className="w-10 h-10 rounded-xl overflow-hidden cursor-pointer shrink-0 border border-slate-200 shadow-sm hover:ring-2 hover:ring-[#85cc00]/50 transition-all"
-                                                  title="Lihat Foto"
+                                                  onClick={() => {
+                                                    if (student?.profilePhotoUrl) {
+                                                      setZoomedPhotoUrl(getDriveImageUrl(student.profilePhotoUrl));
+                                                      setZoomedStudentName(studentDisplayName || "Foto Siswa");
+                                                    }
+                                                  }}
+                                                  className="w-10 h-10 rounded-xl overflow-hidden cursor-pointer shrink-0 border border-slate-200 shadow-sm hover:ring-2 hover:ring-[#85cc00]/50 active:scale-95 transition-all"
+                                                  title="Klik untuk memperbesar foto"
                                                 >
                                                   <img 
                                                     src={getDriveImageUrl(student.profilePhotoUrl)} 
@@ -7129,7 +7141,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                    <div className="relative group">
                                      <input
                                        type="text"
-                                       placeholder="Cari nama atau NISN..."
+                                       placeholder="Cari nama atau NIS..."
                                        value={studentSearchQuery}
                                        onChange={(e) => setStudentSearchQuery(e.target.value)}
                                        className="block w-full rounded-xl bg-white border border-slate-200 pl-10 pr-8 py-2.5 text-xs font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-semibold focus:border-[#85cc00] focus:ring-2 focus:ring-[#85cc00]/10 transition-all outline-none"
@@ -7248,7 +7260,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                       No
                                     </th>
                                     <th className="px-8 py-6 text-left text-sm font-black text-slate-900 bg-slate-100 uppercase tracking-wider sticky top-0 z-30 border border-black whitespace-nowrap">
-                                      NIS/NISN
+                                      NIS
                                     </th>
                                     <th className="px-8 py-6 text-left text-sm font-black text-slate-900 bg-slate-100 uppercase tracking-wider sticky top-0 z-30 w-80 border border-black whitespace-nowrap">
                                       Nama Lengkap Siswa
@@ -9002,7 +9014,7 @@ const targetCls = selectedClassFilter || stu.kelas;
                               100% Permanen di Firestore
                             </p>
                             <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                              Nama, NISN, Kelas, Nilai Angka, Catatan Guru, Tanggal Rilis, dan Penyerahan tidak pernah hilang.
+                              Nama, NIS, Kelas, Nilai Angka, Catatan Guru, Tanggal Rilis, dan Penyerahan tidak pernah hilang.
                             </p>
                           </div>
 

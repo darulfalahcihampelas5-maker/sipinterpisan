@@ -563,7 +563,7 @@ export default function LoginPage() {
                                <p className="text-[10px] text-slate-400 mb-4 font-medium italic">Pastikan data di bawah ini benar sebelum masuk ke dashboard.</p>
                                <div className="grid grid-cols-2 gap-3">
                                   <div className="bg-white p-3 rounded-md border border-slate-150 shadow-sm">
-                                     <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">NISN</p>
+                                     <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">NIS</p>
                                      <p className="text-xs font-bold text-slate-700">{student.nisn}</p>
                                   </div>
                                   <div className="bg-white p-3 rounded-md border border-slate-150 shadow-sm">
