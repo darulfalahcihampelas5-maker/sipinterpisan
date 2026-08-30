@@ -98,6 +98,7 @@ import { ZoomPhotoModal } from "../components/teacher/ZoomPhotoModal";
 import { WhatsAppShareModal } from "../components/teacher/WhatsAppShareModal";
 import { StudentProfileModal } from "../components/teacher/StudentProfileModal";
 import { LogoutModal } from "../components/teacher/LogoutModal";
+import { AuditSubmissionModal } from "../components/teacher/AuditSubmissionModal";
 import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
 
 const trackUsage = (reads = 0, writes = 0) => {
@@ -9255,6 +9256,34 @@ const targetCls = selectedClassFilter || stu.kelas;
         waStudent={waStudent}
         waDraftMessage={waDraftMessage}
         onClose={() => setIsWaModalOpen(false)}
+      />
+
+      {/* Audit Respon / Grading Modal */}
+      <AuditSubmissionModal
+        isOpen={isGradingModalOpen}
+        onClose={() => {
+          setIsGradingModalOpen(false);
+          setSelectedSubmission(null);
+        }}
+        submission={selectedSubmission}
+        assignment={assignmentsList.find(
+          (a) => a.id === selectedSubmission?.assignmentId
+        )}
+        student={studentsList.find(
+          (s) => s.nisn === selectedSubmission?.nisn
+        )}
+        gradeValue={gradeValue}
+        setGradeValue={setGradeValue}
+        feedbackReason={feedbackReason}
+        setFeedbackReason={setFeedbackReason}
+        isRejecting={isRejecting}
+        setIsRejecting={setIsRejecting}
+        isSavingGrade={isSavingGrade}
+        onSaveGrade={handleSimpanPenilaian}
+        onZoomPhoto={(photoUrl, name) => {
+          setZoomedPhotoUrl(photoUrl);
+          setZoomedStudentName(name);
+        }}
       />
 
       {/* Student Profile Modal */}
