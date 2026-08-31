@@ -100,6 +100,10 @@ import { StudentProfileModal } from "../components/teacher/StudentProfileModal";
 import { LogoutModal } from "../components/teacher/LogoutModal";
 import { AuditSubmissionModal } from "../components/teacher/AuditSubmissionModal";
 import { EditStudentModal } from "../components/teacher/EditStudentModal";
+import { PublishExamToClassModal } from "../components/teacher/PublishExamToClassModal";
+import { DownloadExamReportModal } from "../components/teacher/DownloadExamReportModal";
+import { ResetStudentExamModal } from "../components/teacher/ResetStudentExamModal";
+import { ShareCbtExamModal } from "../components/teacher/ShareCbtExamModal";
 import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
 
 const trackUsage = (reads = 0, writes = 0) => {
@@ -970,6 +974,46 @@ export default function DashboardTeacher() {
   const [publishOtherClasses, setPublishOtherClasses] = useState<string[]>([]);
   const [newPublishToken, setNewPublishToken] = useState("");
   const [isSavingDuplicateExam, setIsSavingDuplicateExam] = useState(false);
+  const [shareCbtExamModal, setShareCbtExamModal] = useState<{
+    isOpen: boolean;
+    exam: any;
+    customToken?: string;
+    customClasses?: string[];
+  }>({ isOpen: false, exam: null });
+
+  const handleConfirmResetStudentExam = async (examId: string, targetNisn: string) => {
+    setIsSavingDuplicateExam(true);
+    try {
+      if (targetNisn === "ALL") {
+        const gradesToDelete = finalGradesList.filter(
+          (g) => g.assignmentId === examId || g.examId === examId
+        );
+        for (const g of gradesToDelete) {
+          if (g.id) {
+            await deleteDoc(doc(db, "final_grades", g.id));
+          } else if (g.nisn) {
+            await deleteDoc(doc(db, "final_grades", `${examId}_${g.nisn}`));
+          }
+        }
+      } else {
+        await deleteDoc(doc(db, "final_grades", `${examId}_${targetNisn}`));
+      }
+
+      localStorage.removeItem("firas_cache_final_grades");
+      fetchTeacherData(false);
+      setExamToReset(null);
+      showAlert(
+        "Berhasil",
+        "Status ujian siswa telah berhasil di-reset. Siswa kini dapat memasukkan token kembali dan mengerjakan ulang ujian CBT.",
+        "alert"
+      );
+    } catch (error) {
+      console.warn("Gagal reset ujian:", error);
+      showAlert("Gagal", "Terjadi kesalahan saat mereset ujian siswa.", "danger");
+    } finally {
+      setIsSavingDuplicateExam(false);
+    }
+  };
 
   const handleResetStudentExam = async (gradeId: string) => {
     showConfirm(
@@ -978,6 +1022,8 @@ export default function DashboardTeacher() {
       async () => {
         try {
           await deleteDoc(doc(db, "final_grades", gradeId));
+          localStorage.removeItem("firas_cache_final_grades");
+          fetchTeacherData(false);
           showAlert("Berhasil", "Status ujian siswa telah reset.", "alert");
         } catch (error) {
           console.warn("Gagal reset ujian:", error);
@@ -4170,14 +4216,17 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
 
   const handlePublishToOtherClass = async () => {
     const targetClasses = publishOtherClasses.length > 0 ? publishOtherClasses : (newPublishKelas ? [newPublishKelas] : []);
-    if (targetClasses.length === 0 || !examToPublish || !newPublishToken.trim()) {
+    const effectiveClasses = targetClasses.filter((c) => c !== "SEMUA_KELAS");
+    const finalClasses = effectiveClasses.length > 0 ? effectiveClasses : (classesList.length > 0 ? classesList.map(c => c.name) : targetClasses);
+
+    if (finalClasses.length === 0 || !examToPublish || !newPublishToken.trim()) {
       showAlert("Peringatan", "Mohon pilih minimal satu kelas target (checklist) dan token ujian.", "danger");
       return;
     }
 
     setIsSavingDuplicateExam(true);
     try {
-      for (const targetCls of targetClasses) {
+      for (const targetCls of finalClasses) {
         const newExamId = `EXM-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
         await setDoc(doc(db, "exams", newExamId), {
           ...examToPublish,
@@ -4189,14 +4238,29 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
         });
       }
 
+      localStorage.removeItem("firas_cache_exams");
+      fetchTeacherData(false);
+
+      const publishedExam = examToPublish;
+      const publishedToken = newPublishToken.toUpperCase();
+      const publishedTargetClasses = finalClasses;
+
       setIsPublishOtherClassModalOpen(false);
       showAlert(
         "Berhasil", 
-        `Ujian berhasil diterbitkan untuk ${targetClasses.length} kelas target (${targetClasses.join(", ")}). Token Ujian: ${newPublishToken.toUpperCase()}`, 
+        `Ujian berhasil diterbitkan untuk ${finalClasses.length} kelas target (${finalClasses.join(", ")}). Token Ujian: ${publishedToken}`, 
         "alert"
       );
       setPublishOtherClasses([]);
       setNewPublishKelas("");
+
+      // Automatically offer to share via WhatsApp
+      setShareCbtExamModal({
+        isOpen: true,
+        exam: publishedExam,
+        customToken: publishedToken,
+        customClasses: publishedTargetClasses,
+      });
     } catch (error) {
       console.warn(error);
       showAlert("Gagal", "Gagal menerbitkan ulang ujian.", "danger");
@@ -8149,18 +8213,32 @@ const targetCls = selectedClassFilter || stu.kelas;
                                         <td className="p-4 text-center font-mono font-bold text-sm text-slate-900">
                                           {exam.kkm}
                                         </td>
-                                        <td className="p-4 text-right flex justify-end gap-2">
+                                        <td className="p-4 text-right flex justify-end gap-1.5 items-center">
+                                          <button
+                                            onClick={() => {
+                                              setShareCbtExamModal({
+                                                isOpen: true,
+                                                exam: exam,
+                                                customToken: exam.token,
+                                                customClasses: Array.isArray(exam.targetClasses) && exam.targetClasses.length > 0 ? exam.targetClasses : [exam.kelasRef || "Semua Kelas"],
+                                              });
+                                            }}
+                                            className="p-2 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+                                            title="Bagikan Info & Token Ujian ke WhatsApp"
+                                          >
+                                            <MessageCircle className="w-4 h-4" />
+                                          </button>
                                           <button
                                             onClick={() => handleOpenPublishModal(exam)}
-                                            className="p-2 text-[#85cc00] hover:text-[#85cc00]/80 rounded-lg transition-colors"
-                                            title="Terbitkan ke Kelas Lain"
+                                            className="p-2 text-[#85cc00] hover:text-[#74b300] hover:bg-lime-50 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+                                            title="Terbitkan ke Kelas Lain / Tambah Target Kelas"
                                           >
                                             <Share2 className="w-4 h-4" />
                                           </button>
                                           <button
                                             onClick={() => setExamToReset(exam)}
-                                            className="p-2 text-orange-500 hover:text-orange-600 rounded-lg transition-colors"
-                                            title="Reset Ujian Siswa"
+                                            className="p-2 text-orange-500 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+                                            title="Reset Ujian Siswa (Beri Kesempatan Mengulang)"
                                           >
                                             <RefreshCw className="w-4 h-4" />
                                           </button>
@@ -8172,14 +8250,14 @@ const targetCls = selectedClassFilter || stu.kelas;
                                                 selectedClass: exam.kelasRef || "SEMUA_KELAS",
                                               })
                                             }
-                                            className="p-2 text-[#85cc00] hover:text-[#85cc00]/80 rounded-lg transition-colors"
-                                            title="Unduh Laporan Hasil & Pelanggaran Ujian"
+                                            className="p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
+                                            title="Unduh Laporan Hasil & Pelanggaran Ujian (PDF)"
                                           >
                                             <FileText className="w-4 h-4" />
                                           </button>
                                           <button
                                             onClick={() => handleDeleteExam(exam.id)}
-                                            className="p-2 text-rose-500 hover:text-rose-600 rounded-lg transition-colors"
+                                            className="p-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer shadow-xs active:scale-95"
                                             title="Hapus Ujian"
                                           >
                                             <Trash2 className="w-4 h-4" />
@@ -8588,7 +8666,7 @@ const targetCls = selectedClassFilter || stu.kelas;
                                       Bagikan kode token ini hanya kepada pengawas atau kelas <span className="font-extrabold text-slate-800">{examKelas || "sasaran"}</span> untuk memulai.
                                     </p>
                                   </div>
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex flex-wrap items-center gap-3">
                                     <div className="relative flex items-center">
                                       <input
                                         type="text"
@@ -8602,7 +8680,7 @@ const targetCls = selectedClassFilter || stu.kelas;
                                         type="button"
                                         onClick={() => {
                                           navigator.clipboard.writeText(examToken);
-                                          showAlert("Token Disalin", "Token berhasil disalin.", "alert");
+                                          showAlert("Token Disalin", "Token berhasil disalin ke papan klip.", "alert");
                                         }}
                                         className="absolute right-3 p-1.5 text-slate-500 hover:text-[#85cc00] transition-colors cursor-pointer"
                                         title="Salin Token"
@@ -8617,6 +8695,30 @@ const targetCls = selectedClassFilter || stu.kelas;
                                       title="Acak Token Baru"
                                     >
                                       <RefreshCw className="w-5 h-5 stroke-[2.5]" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShareCbtExamModal({
+                                          isOpen: true,
+                                          exam: {
+                                            title: examTitle || "Ujian CBT Baru",
+                                            subject: examSubject || "Informatika",
+                                            duration: examDuration,
+                                            questions: examQuestions,
+                                            kkm: examKkm,
+                                            token: examToken,
+                                            kelasRef: examKelas || "Sasaran",
+                                          },
+                                          customToken: examToken,
+                                          customClasses: examKelas ? [examKelas] : ["Semua Kelas"],
+                                        });
+                                      }}
+                                      className="px-4 py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs rounded-2xl transition-all flex items-center gap-2 shadow-md cursor-pointer shrink-0"
+                                      title="Bagikan ke WhatsApp"
+                                    >
+                                      <MessageCircle className="w-5 h-5" />
+                                      <span>Bagikan WA</span>
                                     </button>
                                   </div>
                                 </div>
@@ -9364,6 +9466,69 @@ const targetCls = selectedClassFilter || stu.kelas;
           setZoomedPhotoUrl(photoUrl);
           setZoomedStudentName(name);
         }}
+      />
+
+      {/* Publish Exam to Other Classes Modal */}
+      <PublishExamToClassModal
+        isOpen={isPublishOtherClassModalOpen}
+        onClose={() => {
+          setIsPublishOtherClassModalOpen(false);
+          setExamToPublish(null);
+        }}
+        exam={examToPublish}
+        classesList={classesList}
+        publishOtherClasses={publishOtherClasses}
+        setPublishOtherClasses={setPublishOtherClasses}
+        newPublishToken={newPublishToken}
+        setNewPublishToken={setNewPublishToken}
+        isSavingDuplicateExam={isSavingDuplicateExam}
+        onPublish={handlePublishToOtherClass}
+        onOpenWhatsAppShare={(ex, customTok, targetCls) => {
+          setShareCbtExamModal({
+            isOpen: true,
+            exam: ex,
+            customToken: customTok,
+            customClasses: targetCls,
+          });
+        }}
+      />
+
+      {/* Download Exam Report Modal */}
+      <DownloadExamReportModal
+        isOpen={downloadExamModal.isOpen}
+        onClose={() =>
+          setDownloadExamModal({ isOpen: false, exam: null, selectedClass: "SEMUA_KELAS" })
+        }
+        exam={downloadExamModal.exam}
+        classesList={classesList}
+        selectedClass={downloadExamModal.selectedClass || "SEMUA_KELAS"}
+        setSelectedClass={(cls) =>
+          setDownloadExamModal((prev) => ({ ...prev, selectedClass: cls }))
+        }
+        onDownloadReport={(ex, cls) => handleDownloadViolationReport(ex, cls)}
+        isGeneratingPdf={isGeneratingPdf}
+        studentsList={studentsList}
+        finalGradesList={finalGradesList}
+      />
+
+      {/* Reset Student Exam Modal */}
+      <ResetStudentExamModal
+        isOpen={!!examToReset}
+        onClose={() => setExamToReset(null)}
+        exam={examToReset}
+        studentsList={studentsList}
+        finalGradesList={finalGradesList}
+        onConfirmReset={handleConfirmResetStudentExam}
+        isResetting={isSavingDuplicateExam}
+      />
+
+      {/* Share CBT Exam via WhatsApp Modal */}
+      <ShareCbtExamModal
+        isOpen={shareCbtExamModal.isOpen}
+        onClose={() => setShareCbtExamModal({ isOpen: false, exam: null })}
+        exam={shareCbtExamModal.exam}
+        customToken={shareCbtExamModal.customToken}
+        customClasses={shareCbtExamModal.customClasses}
       />
 
       {/* Logout Confirmation Modal */}
