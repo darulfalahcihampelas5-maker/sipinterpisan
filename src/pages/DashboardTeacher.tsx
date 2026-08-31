@@ -104,6 +104,9 @@ import { PublishExamToClassModal } from "../components/teacher/PublishExamToClas
 import { DownloadExamReportModal } from "../components/teacher/DownloadExamReportModal";
 import { ResetStudentExamModal } from "../components/teacher/ResetStudentExamModal";
 import { ShareCbtExamModal } from "../components/teacher/ShareCbtExamModal";
+import { SupabaseSyncModal } from "../components/teacher/SupabaseSyncModal";
+import { getFinalGrades, subscribeToFinalGrades } from "../lib/supabaseSync";
+import { isSupabaseConfigured } from "../lib/supabase";
 import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
 
 const trackUsage = (reads = 0, writes = 0) => {
@@ -980,6 +983,7 @@ export default function DashboardTeacher() {
     customToken?: string;
     customClasses?: string[];
   }>({ isOpen: false, exam: null });
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
 
   const handleConfirmResetStudentExam = async (examId: string, targetNisn: string) => {
     setIsSavingDuplicateExam(true);
@@ -1496,15 +1500,13 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 5. Final Grades (Dynamic, obeys forceRefresh)
+      // 5. Final Grades (Supabase primary + Firestore fallback, unlimited reads)
       const cachedFinalGrades = !forceRefresh && getLocalCache<any[]>("firas_cache_final_grades", 10 * 60 * 1000);
       if (cachedFinalGrades) {
         setFinalGradesList(cachedFinalGrades);
       } else {
         try {
-          const snapshot = await getDocs(collection(db, "final_grades"));
-          trackUsage(snapshot.size, 0);
-          const grades = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const grades = await getFinalGrades();
           setFinalGradesList(grades);
           setLocalCache("firas_cache_final_grades", grades);
         } catch (e) {
@@ -1645,6 +1647,26 @@ export default function DashboardTeacher() {
   useEffect(() => {
     // Initial fetch on mount with cache support
     fetchTeacherData(false);
+
+    // Real-time Supabase subscription (Zero quota, instant updates when students submit)
+    const unsubscribeGrades = subscribeToFinalGrades((incomingGrade) => {
+      setFinalGradesList((prevGrades) => {
+        const index = prevGrades.findIndex((g) => g.id === incomingGrade.id);
+        let updatedList: any[];
+        if (index >= 0) {
+          updatedList = [...prevGrades];
+          updatedList[index] = { ...updatedList[index], ...incomingGrade };
+        } else {
+          updatedList = [incomingGrade, ...prevGrades];
+        }
+        setLocalCache("firas_cache_final_grades", updatedList);
+        return updatedList;
+      });
+    });
+
+    return () => {
+      unsubscribeGrades();
+    };
   }, []);
 
   const handleDeleteAssignment = async (id: string) => {
@@ -4887,6 +4909,14 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                         </p>
                       </div>
                       <div className="flex items-center gap-3 self-center md:self-end">
+                        <button
+                          onClick={() => setIsSupabaseModalOpen(true)}
+                          className="flex items-center gap-2 px-5 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold rounded-2xl hover:bg-emerald-100 hover:border-emerald-300 transition-all shadow-sm active:scale-95 cursor-pointer text-xs"
+                          title="Buka Sinkronisasi Database Supabase"
+                        >
+                          <Database size={16} className="text-emerald-600" />
+                          <span>Status & Sinkron Supabase</span>
+                        </button>
                         {!isEditingUserSettings ? (
                           <button
                             onClick={() => setIsEditingUserSettings(true)}
@@ -9529,6 +9559,15 @@ const targetCls = selectedClassFilter || stu.kelas;
         exam={shareCbtExamModal.exam}
         customToken={shareCbtExamModal.customToken}
         customClasses={shareCbtExamModal.customClasses}
+      />
+
+      {/* Supabase Database Sync Modal */}
+      <SupabaseSyncModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+        onSuccessRefresh={() => {
+          fetchTeacherData(true);
+        }}
       />
 
       {/* Logout Confirmation Modal */}

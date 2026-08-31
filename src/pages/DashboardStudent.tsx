@@ -20,6 +20,8 @@ import { uploadFileToDrive, uploadFileToDriveWithToken } from "../lib/driveUploa
 import { fetchWithRetry } from "../lib/fetchWithRetry";
 import { Toast } from "../components/Toast";
 import { getLocalCache, setLocalCache, clearStudentCaches } from "../lib/firestoreUtils";
+import { saveFinalGrade } from "../lib/supabaseSync";
+import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
 export function handleOpenFileLink(rawUrl: string, e?: React.MouseEvent) {
   if (e) {
@@ -1896,11 +1898,14 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
 
     const saveToCloud = async () => {
       try {
-        const finalGradeRef = doc(db, "final_grades", `${activeExam.id}_${student.nisn}`);
-        await setDoc(finalGradeRef, {
+        await saveFinalGrade({
           ...result,
+          id: `${activeExam.id}_${student.nisn}`,
+          examId: activeExam.id,
           assignmentId: activeExam.id,
           nisn: student.nisn || "",
+          studentName: student.name || "",
+          kelas: student.kelas || "",
           type: "exam",
         });
         trackUsage(0, 1);
@@ -2190,6 +2195,37 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
     const cacheKey = `firas_cache_final_grades_${student.nisn}`;
     const cached = getLocalCache<any[]>(cacheKey, 2 * 60 * 60 * 1000);
     if (cached) return cached;
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data: supaData, error } = await supabase
+          .from("final_grades")
+          .select("*")
+          .eq("nisn", student.nisn);
+        if (!error && Array.isArray(supaData)) {
+          const data = supaData.map((d) => ({
+            id: d.id,
+            assignmentId: d.assignment_id || d.exam_id,
+            examId: d.exam_id || d.assignment_id,
+            nisn: d.nisn,
+            studentName: d.student_name,
+            kelas: d.kelas,
+            nilai: d.nilai ?? d.score,
+            score: d.score ?? d.nilai,
+            submittedAt: d.submitted_at,
+            violationCount: d.violation_count || 0,
+            answers: d.answers || {},
+            isRemedial: d.is_remedial,
+            remedialScore: d.remedial_score,
+          }));
+          setLocalCache(cacheKey, data);
+          setIsOffline(false);
+          return data;
+        }
+      } catch (err) {
+        console.warn("Supabase student final grades fallback:", err);
+      }
+    }
 
     try {
       const snapshot = await getDocs(query(collection(db, "final_grades"), where("nisn", "==", student.nisn)));
