@@ -1342,8 +1342,8 @@ export default function DashboardTeacher() {
   const fetchTeacherData = async (forceRefresh = false) => {
     setIsRefreshingTeacherData(true);
     try {
-      // 1. Classes
-      const cachedClasses = !forceRefresh && getLocalCache<any[]>("firas_cache_classes", 60 * 60 * 1000);
+      // 1. Classes (rarely changes, always cache first unless missing)
+      const cachedClasses = getLocalCache<any[]>("firas_cache_classes", 12 * 60 * 60 * 1000);
       if (cachedClasses) {
         setClassesList(cachedClasses);
       } else {
@@ -1359,8 +1359,8 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 2. Students
-      const cachedStudents = !forceRefresh && getLocalCache<any[]>("firas_cache_students", 60 * 60 * 1000);
+      // 2. Students (rarely changes, always cache first unless missing)
+      const cachedStudents = getLocalCache<any[]>("firas_cache_students", 12 * 60 * 60 * 1000);
       if (cachedStudents) {
         setStudentsList(cachedStudents);
       } else {
@@ -1386,8 +1386,8 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 3. Assignments
-      const cachedAssignments = !forceRefresh && getLocalCache<any[]>("firas_cache_assignments", 60 * 60 * 1000);
+      // 3. Assignments (rarely changes, always cache first unless missing)
+      const cachedAssignments = getLocalCache<any[]>("firas_cache_assignments", 12 * 60 * 60 * 1000);
       if (cachedAssignments) {
         setAssignmentsList(cachedAssignments);
       } else {
@@ -1407,29 +1407,57 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 4. Submissions
-      const cachedSubmissions = !forceRefresh && getLocalCache<any[]>("firas_cache_submissions", 60 * 60 * 1000);
+      // 4. Submissions (Solution B: Targeted Query for last 7 days OR status != "sudah dinilai")
+      // Highly dynamic, obeys forceRefresh
+      const cachedSubmissions = !forceRefresh && getLocalCache<any[]>("firas_cache_submissions", 10 * 60 * 1000);
       if (cachedSubmissions) {
         setSubmissionsList(cachedSubmissions);
       } else {
         try {
-          const snapshot = await getDocs(collection(db, "submissions"));
-          trackUsage(snapshot.size, 0);
-          const subs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+          const sevenDaysAgoIso = sevenDaysAgo.toISOString();
+
+          // Query A: Submissions in the last 7 days (both graded and ungraded)
+          const qRecent = query(
+            collection(db, "submissions"),
+            where("submittedAt", ">=", sevenDaysAgoIso)
+          );
+
+          // Query B: Ungraded/pending/rejected submissions (even if older than 7 days)
+          const qPending = query(
+            collection(db, "submissions"),
+            where("status", "!=", "sudah dinilai")
+          );
+
+          const [snapRecent, snapPending] = await Promise.all([
+            getDocs(qRecent),
+            getDocs(qPending)
+          ]);
+
+          // Merge by ID to prevent duplicates
+          const mergedDocs = new Map();
+          snapRecent.docs.forEach((d) => mergedDocs.set(d.id, { id: d.id, ...d.data() }));
+          snapPending.docs.forEach((d) => mergedDocs.set(d.id, { id: d.id, ...d.data() }));
+
+          const subs = Array.from(mergedDocs.values());
+          trackUsage(snapRecent.size + snapPending.size, 0);
+
           setSubmissionsList(subs);
           setLocalCache("firas_cache_submissions", subs);
         } catch (e) {
-          console.warn("Failed fetching submissions:", e);
+          console.warn("Failed fetching submissions with targeted query:", e);
         }
       }
 
-      // 5. Final Grades
-      const cachedFinalGrades = !forceRefresh && getLocalCache<any[]>("firas_cache_final_grades", 60 * 60 * 1000);
+      // 5. Final Grades (Dynamic, obeys forceRefresh)
+      const cachedFinalGrades = !forceRefresh && getLocalCache<any[]>("firas_cache_final_grades", 10 * 60 * 1000);
       if (cachedFinalGrades) {
         setFinalGradesList(cachedFinalGrades);
       } else {
         try {
           const snapshot = await getDocs(collection(db, "final_grades"));
+          trackUsage(snapshot.size, 0);
           const grades = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
           setFinalGradesList(grades);
           setLocalCache("firas_cache_final_grades", grades);
@@ -1438,8 +1466,8 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 6. Chapters
-      const cachedChapters = !forceRefresh && getLocalCache<any[]>("firas_cache_chapters", 60 * 60 * 1000);
+      // 6. Chapters (Static, always cache first)
+      const cachedChapters = getLocalCache<any[]>("firas_cache_chapters", 24 * 60 * 60 * 1000);
       if (cachedChapters) {
         setChaptersList(cachedChapters);
       } else {
@@ -1453,8 +1481,8 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 7. Exams
-      const cachedExams = !forceRefresh && getLocalCache<any[]>("firas_cache_exams", 60 * 60 * 1000);
+      // 7. Exams (Static, always cache first)
+      const cachedExams = getLocalCache<any[]>("firas_cache_exams", 12 * 60 * 60 * 1000);
       if (cachedExams) {
         setExamsList(cachedExams);
       } else {
@@ -1474,8 +1502,8 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 8. Announcements
-      const cachedAnnouncements = !forceRefresh && getLocalCache<any[]>("firas_cache_announcements", 60 * 60 * 1000);
+      // 8. Announcements (rarely changes, always cache first unless stale)
+      const cachedAnnouncements = getLocalCache<any[]>("firas_cache_announcements", 2 * 60 * 60 * 1000);
       if (cachedAnnouncements) {
         setAnnouncementsList(cachedAnnouncements);
       } else {
@@ -1495,8 +1523,8 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 9. Absensi
-      const cachedAbsensi = !forceRefresh && getLocalCache<any[]>("firas_cache_absensi", 60 * 60 * 1000);
+      // 9. Absensi (Dynamic, obeys forceRefresh)
+      const cachedAbsensi = !forceRefresh && getLocalCache<any[]>("firas_cache_absensi", 15 * 60 * 1000);
       if (cachedAbsensi) {
         setAbsensiList(cachedAbsensi);
       } else {
@@ -1511,8 +1539,8 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 10. Materials
-      const cachedMaterials = !forceRefresh && getLocalCache<any[]>("firas_cache_materials", 60 * 60 * 1000);
+      // 10. Materials (Static, always cache first)
+      const cachedMaterials = getLocalCache<any[]>("firas_cache_materials", 12 * 60 * 60 * 1000);
       if (cachedMaterials) {
         setMaterialsList(cachedMaterials);
       } else {
@@ -1533,8 +1561,8 @@ export default function DashboardTeacher() {
         }
       }
 
-      // 11. Rubric
-      const cachedRubric = !forceRefresh && getLocalCache<any>("firas_cache_rubric", 60 * 60 * 1000);
+      // 11. Rubric (Static, always cache first)
+      const cachedRubric = getLocalCache<any>("firas_cache_rubric", 24 * 60 * 60 * 1000);
       if (cachedRubric) {
         setRubric(cachedRubric);
         setEditKehadiran(String(cachedRubric.kehadiran ?? 20));
