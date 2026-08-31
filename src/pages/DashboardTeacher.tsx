@@ -99,6 +99,7 @@ import { WhatsAppShareModal } from "../components/teacher/WhatsAppShareModal";
 import { StudentProfileModal } from "../components/teacher/StudentProfileModal";
 import { LogoutModal } from "../components/teacher/LogoutModal";
 import { AuditSubmissionModal } from "../components/teacher/AuditSubmissionModal";
+import { EditStudentModal } from "../components/teacher/EditStudentModal";
 import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
 
 const trackUsage = (reads = 0, writes = 0) => {
@@ -1802,43 +1803,55 @@ export default function DashboardTeacher() {
     );
   };
 
-  const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
-  const [editingStudentData, setEditingStudentData] = useState({
-    displayName: "",
-    kelas: "",
-    nisn: "",
-    accessCode: "",
-  });
+  const [editingStudent, setEditingStudent] = useState<any | null>(null);
 
   const handleEditStudent = (stud: any) => {
-    setEditingStudentId(stud.id);
-    setEditingStudentData({
-      displayName: stud.displayName,
-      kelas: stud.kelas,
-      nisn: stud.nisn,
-      accessCode: stud.accessCode || "",
-    });
+    setEditingStudent(stud);
   };
 
-  const handleSaveEditStudent = async () => {
-    if (!editingStudentId || !editingStudentData.displayName || !editingStudentData.kelas) return;
+  const handleSaveEditStudent = async (updatedData: {
+    displayName: string;
+    kelas: string;
+    nisn: string;
+    accessCode: string;
+  }) => {
+    if (!editingStudent) return;
+    const docId = editingStudent.id || editingStudent.nisn || updatedData.nisn;
     try {
       await setDoc(
-        doc(db, "studentsByNisn", editingStudentId),
+        doc(db, "studentsByNisn", docId),
         {
-          displayName: editingStudentData.displayName,
-          kelas: editingStudentData.kelas,
-          accessCode: editingStudentData.accessCode || "",
+          displayName: updatedData.displayName,
+          kelas: updatedData.kelas,
+          nisn: updatedData.nisn,
+          accessCode: updatedData.accessCode || "",
+          updatedAt: new Date().toISOString(),
         },
         { merge: true },
       );
-      setEditingStudentId(null);
+
+      // Perbarui local state studentsList agar langsung terlihat
+      setStudentsList((prev) =>
+        prev.map((s) =>
+          (s.id === docId || s.nisn === editingStudent.nisn)
+            ? { ...s, ...updatedData }
+            : s
+        )
+      );
+
+      // Invalidate cache
+      localStorage.removeItem("firas_cache_students");
+
+      trackUsage(0, 1);
+      showAlert("Berhasil", `Data siswa ${updatedData.displayName} berhasil diperbarui.`, "alert");
+      setEditingStudent(null);
     } catch (error) {
       handleFirestoreError(
         error,
         OperationType.UPDATE,
-        `studentsByNisn/${editingStudentId}`,
+        `studentsByNisn/${docId}`,
       );
+      throw error;
     }
   };
 
@@ -9310,6 +9323,19 @@ const targetCls = selectedClassFilter || stu.kelas;
         examsList={examsList}
         finalGradesList={finalGradesList}
         getAssignmentPublishedAtForTeacher={getAssignmentPublishedAtForTeacher}
+      />
+
+      {/* Edit Student Modal */}
+      <EditStudentModal
+        isOpen={!!editingStudent}
+        onClose={() => setEditingStudent(null)}
+        student={editingStudent}
+        classesList={classesList}
+        onSave={handleSaveEditStudent}
+        onZoomPhoto={(photoUrl, name) => {
+          setZoomedPhotoUrl(photoUrl);
+          setZoomedStudentName(name);
+        }}
       />
 
       {/* Logout Confirmation Modal */}
