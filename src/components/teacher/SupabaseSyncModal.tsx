@@ -28,6 +28,7 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({
   const [syncResult, setSyncResult] = useState<{
     gradesCount: number;
     examsCount: number;
+    otherCount?: number;
     error?: string;
   } | null>(null);
 
@@ -43,7 +44,7 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({
         onSuccessRefresh();
       }
     } catch (err: any) {
-      setSyncResult({ gradesCount: 0, examsCount: 0, error: err.message || "Gagal sinkronisasi" });
+      setSyncResult({ gradesCount: 0, examsCount: 0, otherCount: 0, error: err.message || "Gagal sinkronisasi" });
     } finally {
       setIsSyncing(false);
     }
@@ -183,9 +184,21 @@ CREATE TABLE IF NOT EXISTS exams (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 3. Tabel Koleksi Menu Lainnya (Kelas, Tugas, Absensi, Materi, Pengumuman, dll)
+CREATE TABLE IF NOT EXISTS app_collections (
+    id VARCHAR(255) PRIMARY KEY,
+    collection_name VARCHAR(100) NOT NULL,
+    doc_id VARCHAR(255) NOT NULL,
+    data JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_name ON app_collections(collection_name);
+
 -- Aktifkan akses Read & Write Publik
 ALTER TABLE final_grades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE exams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_collections ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Allow public read-write for final_grades" 
 ON final_grades FOR ALL 
@@ -194,6 +207,11 @@ WITH CHECK (true);
 
 CREATE POLICY "Allow public read-write for exams" 
 ON exams FOR ALL 
+USING (true) 
+WITH CHECK (true);
+
+CREATE POLICY "Allow public read-write for app_collections" 
+ON app_collections FOR ALL 
 USING (true) 
 WITH CHECK (true);`;
                   navigator.clipboard.writeText(sqlCode);
@@ -224,7 +242,7 @@ WITH CHECK (true);`;
                 )}
                 {syncResult.error
                   ? `Sinkronisasi gagal: ${syncResult.error}`
-                  : `Berhasil menyinkronkan ${syncResult.gradesCount} data nilai dan ${syncResult.examsCount} paket ujian ke Supabase!`}
+                  : `Berhasil menyinkronkan ${syncResult.gradesCount} data nilai, ${syncResult.examsCount} paket ujian, dan ${syncResult.otherCount || 0} data menu lainnya ke Supabase!`}
               </div>
             </div>
           )}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { db } from "../lib/firebase";
-import { doc, getDoc, collection, query, where, getDocs, setDoc } from "firebase/firestore";
+import { doc, collection, query, where } from "firebase/firestore";
+import { dbGetDocs as getDocs, dbGetDoc as getDoc, dbSetDoc as setDoc } from "../lib/supabaseSync";
 import { useNavigate } from "react-router-dom";
 import { OperationType, handleFirestoreError } from "../lib/firestoreUtils";
 import { getDriveImageUrl } from "../lib/driveUtils";

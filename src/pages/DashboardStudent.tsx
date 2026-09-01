@@ -4,14 +4,12 @@ import useSWR from "swr";
 import { jsPDF } from "jspdf";
 import {
   collection,
-  getDocs,
   query,
   where,
   doc,
-  setDoc,
-  getDoc,
   deleteDoc,
 } from "firebase/firestore";
+import { dbGetDocs as getDocs, dbGetDoc as getDoc, dbSetDoc as setDoc } from "../lib/supabaseSync";
 import { db, auth, storage } from "../lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getDriveImageUrl, getDrivePdfEmbedUrl } from "../lib/driveUtils";
@@ -2371,31 +2369,36 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
     const list: any[] = [];
     
     assignmentsList.forEach((assign: any) => {
-      const submission = submissionsList.find((s: any) => s.assignmentId === assign.id);
-      if (submission && submission.nilai !== undefined && submission.nilai !== null) {
+      const submission = submissionsList.find((s: any) => s.assignmentId === assign.id && (s.nisn === student.nisn || !s.nisn));
+      const fGrade = finalGradesList.find((f: any) => (f.assignmentId === assign.id || f.id === `${assign.id}_${student.nisn}`) && f.nisn === student.nisn);
+      const gradeVal = submission?.nilai !== undefined && submission?.nilai !== null && submission?.nilai !== ""
+        ? submission.nilai
+        : (fGrade?.nilai !== undefined && fGrade?.nilai !== null && fGrade?.nilai !== "" ? fGrade.nilai : null);
+
+      if (gradeVal !== null && gradeVal !== undefined) {
         list.push({
           id: assign.id,
           title: assign.title || assign.materi,
-          bab: assign.bab || "Informatika",
+          bab: assign.bab || fGrade?.bab || "Informatika",
           subtitle: assign.description || "Tugas Mandiri/Kelompok",
           type: "Tugas",
-          nilai: Number(submission.nilai),
-          tanggal: submission.submittedAt ? new Date(submission.submittedAt).toLocaleDateString("id-ID", {
+          nilai: Number(gradeVal),
+          tanggal: (submission?.submittedAt || fGrade?.gradedAt) ? new Date(submission?.submittedAt || fGrade?.gradedAt).toLocaleDateString("id-ID", {
             day: "numeric",
             month: "short",
             year: "numeric"
           }) : "-",
-          rawDate: submission.submittedAt || ""
+          rawDate: submission?.submittedAt || fGrade?.gradedAt || ""
         });
       }
     });
 
     examsList.forEach((exam: any) => {
-      const fGrade = finalGradesList.find((f: any) => f.assignmentId === exam.id && f.nisn === student.nisn);
-      if (fGrade && fGrade.nilai !== undefined && fGrade.nilai !== null) {
+      const fGrade = finalGradesList.find((f: any) => (f.assignmentId === exam.id || f.id === `${exam.id}_${student.nisn}`) && f.nisn === student.nisn);
+      if (fGrade && fGrade.nilai !== undefined && fGrade.nilai !== null && fGrade.nilai !== "") {
         list.push({
           id: exam.id,
-          title: exam.title,
+          title: exam.title || fGrade.title || "Ujian CBT",
           bab: exam.bab || fGrade.bab || "Informatika",
           subtitle: "Ujian / Evaluasi",
           type: "Ujian",
@@ -2407,6 +2410,30 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
           }) : "-",
           rawDate: fGrade.gradedAt || ""
         });
+      }
+    });
+
+    // Also include any other finalGrades for this student that might not have matched the lists
+    finalGradesList.forEach((fGrade: any) => {
+      if (fGrade.nisn === student.nisn && fGrade.nilai !== undefined && fGrade.nilai !== null && fGrade.nilai !== "") {
+        const alreadyInList = list.some(item => item.id === fGrade.assignmentId || item.id === fGrade.id);
+        if (!alreadyInList) {
+          const isExam = (fGrade.assignmentId && (fGrade.assignmentId.startsWith("EXM-") || fGrade.assignmentId.startsWith("ujian-")));
+          list.push({
+            id: fGrade.assignmentId || fGrade.id,
+            title: fGrade.title || fGrade.materi || (isExam ? "Ujian CBT" : "Tugas Penilaian Guru"),
+            bab: fGrade.bab || "Informatika",
+            subtitle: isExam ? "Ujian / Evaluasi" : (fGrade.description || "Tugas / Penilaian"),
+            type: isExam ? "Ujian" : "Tugas",
+            nilai: Number(fGrade.nilai),
+            tanggal: fGrade.gradedAt ? new Date(fGrade.gradedAt).toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "short",
+              year: "numeric"
+            }) : "-",
+            rawDate: fGrade.gradedAt || ""
+          });
+        }
       }
     });
 
@@ -3036,12 +3063,20 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
         }
       }
 
-      const sub = submissionsList.find((s) => s.assignmentId === assignment.id);
-      const isCompleted = !!sub && sub.status !== "ditolak";
+      const sub = submissionsList.find((s) => s.assignmentId === assignment.id && (s.nisn === student.nisn || !s.nisn));
+      const fGrade = finalGradesList.find((f) => (f.assignmentId === assignment.id || f.id === `${assignment.id}_${student.nisn}`) && f.nisn === student.nisn);
+      const gradeVal = sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" 
+        ? sub.nilai 
+        : (fGrade?.nilai !== undefined && fGrade?.nilai !== null && fGrade?.nilai !== "" ? fGrade.nilai : null);
+      
+      const isGraded = gradeVal !== null && gradeVal !== undefined;
+      const isCompleted = isGraded || (!!sub && sub.status !== "ditolak");
 
       let status: "selesai" | "tertunda" | "terlambat" = "tertunda";
       if (isCompleted) {
         status = "selesai";
+      } else if (assignment.isManualColumn) {
+        status = "tertunda";
       } else if (deadlineStr) {
         const hasDeadlinePassed = new Date() > new Date(deadlineStr);
         if (hasDeadlinePassed) {
@@ -3051,15 +3086,24 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
         }
       }
 
+      const effectiveSub = sub || (isGraded ? {
+        id: `SUB-${student.nisn}-${assignment.id}`,
+        assignmentId: assignment.id,
+        nisn: student.nisn,
+        nilai: Number(gradeVal),
+        status: "sudah dinilai",
+        submittedAt: fGrade?.gradedAt || assignment.publishedAt,
+      } : null);
+
       return {
         id: assignment.id,
-        title: assignment.materi,
-        bab: assignment.bab || "-",
+        title: assignment.materi || assignment.title,
+        bab: assignment.bab || fGrade?.bab || "-",
         description: assignment.description || "",
         deadline: deadlineStr,
         publishedAt: publishedAtStr,
         status,
-        submission: sub,
+        submission: effectiveSub,
         taskLink: assignment.taskLink,
         linkTugas: assignment.linkTugas,
         fileUrl: assignment.fileUrl,
@@ -3076,7 +3120,7 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
       const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
       return dateB - dateA;
     });
-  }, [assignmentsList, submissionsList, student]);
+  }, [assignmentsList, submissionsList, finalGradesList, student]);
 
   const blendedTasks = useMemo(() => {
     return allAssignedTasksWithStatus.map(real => ({

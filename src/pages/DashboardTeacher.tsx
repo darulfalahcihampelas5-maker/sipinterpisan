@@ -6,17 +6,15 @@ import { getDriveImageUrl, getDrivePdfEmbedUrl } from "../lib/driveUtils";
 import { KOP_SURAT_BASE64 } from "../kopSuratBase64";
 import {
   doc,
-  setDoc,
   addDoc,
   collection,
   deleteDoc,
-  getDocs,
-  getDoc,
   updateDoc,
   writeBatch,
   query,
   where,
 } from "firebase/firestore";
+import { dbGetDocs as getDocs, dbGetDoc as getDoc, dbSetDoc as setDoc } from "../lib/supabaseSync";
 import { OperationType, handleFirestoreError, getLocalCache, setLocalCache, clearTeacherCaches } from "../lib/firestoreUtils";
 import { googleSignIn } from "../lib/googleAuth";
 import { fetchWithRetry } from "../lib/fetchWithRetry";
@@ -105,7 +103,8 @@ import { DownloadExamReportModal } from "../components/teacher/DownloadExamRepor
 import { ResetStudentExamModal } from "../components/teacher/ResetStudentExamModal";
 import { ShareCbtExamModal } from "../components/teacher/ShareCbtExamModal";
 import { SupabaseSyncModal } from "../components/teacher/SupabaseSyncModal";
-import { getFinalGrades, subscribeToFinalGrades } from "../lib/supabaseSync";
+import { AddManualColumnModal } from "../components/teacher/AddManualColumnModal";
+import { getFinalGrades, saveFinalGrade, subscribeToFinalGrades } from "../lib/supabaseSync";
 import { isSupabaseConfigured } from "../lib/supabase";
 import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
 
@@ -1742,6 +1741,9 @@ export default function DashboardTeacher() {
         return;
       }
 
+      const updatedFinalGrades = [...finalGradesList];
+      const updatedSubmissions = [...submissionsList];
+
       for (const key of keys) {
         const valStr = editedRekapGrades[key];
         const lastUnderscore = key.lastIndexOf("_");
@@ -1751,51 +1753,99 @@ export default function DashboardTeacher() {
 
         const numVal = (valStr === "" || valStr === null || valStr === undefined) ? null : Number(valStr);
 
-        // 1. Save to final_grades
+        // Find assignment or exam details for metadata
+        const asgObj = assignmentsList.find(a => a.id === colId);
+        const examObj = examsList.find(e => e.id === colId);
+        const colTitle = asgObj?.materi || asgObj?.title || examObj?.title || "Penilaian";
+        const colBab = asgObj?.bab || examObj?.bab || "Informatika";
+
+        // 1. Save to final_grades (Firestore & Supabase)
         const fgId = `${colId}_${nisn}`;
-        await setDoc(
-          doc(db, "final_grades", fgId),
-          {
-            id: fgId,
-            assignmentId: colId,
-            nisn: nisn,
-            nilai: numVal,
-            gradedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
+        const fgData = {
+          id: fgId,
+          assignmentId: colId,
+          nisn: nisn,
+          nilai: numVal,
+          title: colTitle,
+          bab: colBab,
+          gradedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Save to Supabase for quota-free student real-time access
+        try {
+          await saveFinalGrade(fgData);
+        } catch (supaErr) {
+          console.warn("Supabase final grade save warning:", supaErr);
+        }
+
+        // Save to Firestore
+        try {
+          await setDoc(
+            doc(db, "final_grades", fgId),
+            fgData,
+            { merge: true }
+          );
+        } catch (fsErr) {
+          console.warn("Firestore final grade save warning:", fsErr);
+        }
+
+        // Update in-memory finalGradesList
+        const existingFgIdx = updatedFinalGrades.findIndex(g => g.id === fgId || (g.assignmentId === colId && g.nisn === nisn));
+        if (existingFgIdx >= 0) {
+          updatedFinalGrades[existingFgIdx] = { ...updatedFinalGrades[existingFgIdx], ...fgData };
+        } else {
+          updatedFinalGrades.push(fgData);
+        }
 
         // 2. Also update or create submission in submissions collection so student dashboard gets sync
         const subId = `SUB-${nisn}-${colId}`;
-        const existingSub = submissionsList.find(
+        const existingSubIdx = updatedSubmissions.findIndex(
           (s) => s.id === subId || (s.assignmentId === colId && s.nisn === nisn)
         );
+        const existingSub = existingSubIdx >= 0 ? updatedSubmissions[existingSubIdx] : null;
         const targetSubId = existingSub?.id || subId;
         const stuObj = studentsList.find(s => s.nisn === nisn);
         const stName = existingSub?.studentName || stuObj?.displayName || stuObj?.studentName || stuObj?.name || "";
         const stKelas = existingSub?.kelas || stuObj?.kelas || "";
 
-        await setDoc(
-          doc(db, "submissions", targetSubId),
-          {
-            id: targetSubId,
-            assignmentId: colId,
-            nisn: nisn,
-            studentName: stName,
-            kelas: stKelas,
-            nilai: numVal,
-            status: numVal !== null ? "sudah dinilai" : (existingSub?.status || "menunggu"),
-            gradedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
+        const subData = {
+          id: targetSubId,
+          assignmentId: colId,
+          nisn: nisn,
+          studentName: stName,
+          kelas: stKelas,
+          nilai: numVal,
+          status: numVal !== null ? "sudah dinilai" : (existingSub?.status || "menunggu"),
+          gradedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          await setDoc(
+            doc(db, "submissions", targetSubId),
+            subData,
+            { merge: true }
+          );
+        } catch (subFsErr) {
+          console.warn("Firestore submission save warning:", subFsErr);
+        }
+
+        if (existingSubIdx >= 0) {
+          updatedSubmissions[existingSubIdx] = { ...updatedSubmissions[existingSubIdx], ...subData };
+        } else {
+          updatedSubmissions.push(subData);
+        }
       }
+
+      setFinalGradesList(updatedFinalGrades);
+      setSubmissionsList(updatedSubmissions);
+      setLocalCache("firas_cache_final_grades", updatedFinalGrades);
+      setLocalCache("firas_cache_submissions", updatedSubmissions);
 
       setEditedRekapGrades({});
       setIsEditingRekapTable(false);
-      showAlert("Berhasil", "Semua nilai berhasil disimpan dan diperbarui di dashboard siswa!", "alert");
+      showAlert("Berhasil", "Semua nilai berhasil disimpan ke database dan otomatis sinkron ke dashboard siswa!", "alert");
     } catch (err: any) {
       console.warn("Gagal menyimpan edit nilai rekap:", err);
       showAlert("Gagal", "Terjadi kesalahan saat menyimpan nilai: " + (err.message || err), "danger");
@@ -1804,16 +1854,28 @@ export default function DashboardTeacher() {
     }
   };
 
-  const handleCreateManualColumn = async () => {
-    if (!manualMateri.trim()) {
+  const handleCreateManualColumn = async (formData?: {
+    materi: string;
+    bab: string;
+    kelas: string;
+    publishDate: string;
+    description?: string;
+  }) => {
+    const targetMateri = formData?.materi || manualMateri;
+    const targetBab = formData?.bab || manualBab;
+    const targetKelas = formData?.kelas || manualKelas;
+    const targetPubDate = formData?.publishDate || manualPublishDate;
+    const targetDesc = formData?.description || "Kolom Nilai Manual (Buku Nilai)";
+
+    if (!targetMateri.trim()) {
       showAlert("Validasi", "Judul Tugas / Tugas ke wajib diisi.", "alert");
       return;
     }
-    if (!manualBab) {
+    if (!targetBab) {
       showAlert("Validasi", "Pilih Bab terlebih dahulu.", "alert");
       return;
     }
-    if (!manualKelas) {
+    if (!targetKelas) {
       showAlert("Validasi", "Pilih Kelas terlebih dahulu.", "alert");
       return;
     }
@@ -1821,14 +1883,16 @@ export default function DashboardTeacher() {
     setIsSavingManualColumn(true);
     try {
       const newAssignmentId = `TGS-MANUAL-${Date.now()}`;
-      const targetClasses = manualKelas === "ALL" ? classesList.map((c) => c.name) : [manualKelas];
-      const pubDate = manualPublishDate ? new Date(manualPublishDate).toISOString() : new Date().toISOString();
+      const targetClasses = targetKelas === "ALL" || targetKelas === "SEMUA_KELAS" 
+        ? classesList.map((c) => c.name) 
+        : [targetKelas];
+      const pubDate = targetPubDate ? new Date(targetPubDate).toISOString() : new Date().toISOString();
 
       const newDoc = {
         id: newAssignmentId,
-        bab: manualBab,
-        materi: manualMateri.trim(),
-        kelas: manualKelas,
+        bab: targetBab,
+        materi: targetMateri.trim(),
+        kelas: targetKelas,
         targets: targetClasses.map((k) => ({
           kelas: k,
           publishedAt: pubDate,
@@ -1836,14 +1900,20 @@ export default function DashboardTeacher() {
         })),
         publishedAt: pubDate,
         deadline: new Date(new Date(pubDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        description: "Kolom Nilai Manual (Buku Nilai)",
+        description: targetDesc,
         isManualColumn: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         teacherId: user?.uid || "mock-admin",
       };
 
+      // Save to Firestore
       await setDoc(doc(db, "assignments", newAssignmentId), newDoc);
+
+      // Instantly update in-memory state & cache so new column appears in table immediately
+      const updatedAssignments = [newDoc, ...assignmentsList];
+      setAssignmentsList(updatedAssignments);
+      setLocalCache("firas_cache_assignments", updatedAssignments);
 
       setIsAddManualColumnOpen(false);
       setManualBab("");
@@ -1855,7 +1925,7 @@ export default function DashboardTeacher() {
       setIsEditingRekapTable(true);
       showAlert(
         "Berhasil",
-        `Kolom nilai '${manualMateri.trim()}' berhasil ditambahkan ke tabel! Anda dapat langsung menginput nilai siswa pada kolom tersebut.`,
+        `Kolom nilai '${targetMateri.trim()}' berhasil ditambahkan ke tabel! Anda dapat langsung menginput nilai siswa pada kolom tersebut.`,
         "alert"
       );
     } catch (err: any) {
@@ -9561,6 +9631,29 @@ const targetCls = selectedClassFilter || stu.kelas;
         customClasses={shareCbtExamModal.customClasses}
       />
 
+      {/* Add Manual Column Modal */}
+      <AddManualColumnModal
+        isOpen={isAddManualColumnOpen}
+        onClose={() => setIsAddManualColumnOpen(false)}
+        chaptersList={
+          chaptersList.length > 0
+            ? chaptersList
+            : [
+                { id: "Bab 1 - Berpikir Komputasional", name: "Bab 1 - Berpikir Komputasional" },
+                { id: "Bab 2 - Teknologi Informasi dan Komunikasi", name: "Bab 2 - Teknologi Informasi dan Komunikasi" },
+                { id: "Bab 3 - Sistem Komputer", name: "Bab 3 - Sistem Komputer" },
+                { id: "Bab 4 - Jaringan Komputer dan Internet", name: "Bab 4 - Jaringan Komputer dan Internet" },
+                { id: "Bab 5 - Analisis Data", name: "Bab 5 - Analisis Data" },
+                { id: "Bab 6 - Algoritma dan Pemrograman", name: "Bab 6 - Algoritma dan Pemrograman" },
+                { id: "Bab 7 - Dampak Sosial Informatika", name: "Bab 7 - Dampak Sosial Informatika" },
+                { id: "Bab 8 - Praktik Lintas Bidang", name: "Bab 8 - Praktik Lintas Bidang" },
+              ]
+        }
+        classesList={classesList}
+        onSave={handleCreateManualColumn}
+        isSaving={isSavingManualColumn}
+      />
+
       {/* Supabase Database Sync Modal */}
       <SupabaseSyncModal
         isOpen={isSupabaseModalOpen}
@@ -9573,9 +9666,4 @@ const targetCls = selectedClassFilter || stu.kelas;
       {/* Logout Confirmation Modal */}
       <LogoutModal
         isOpen={showLogoutModal}
-        onClose={() => setShowLogoutModal(false)}
-        onConfirm={handleLogout}
-      />
-    </div>
-  );
-}
+ xœRP ƒü<çœüâTÛjM[;…âÔ’àŒürŸüôüÒßü”Ä´ÄœâTÍZ.¸Žü¼´Ì¢\ÛêŒÄ¼”œTˆb˜};0ÃF?%³ÄÔ´æªå   ÿÿ <a
