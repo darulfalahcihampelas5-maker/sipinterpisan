@@ -6,7 +6,7 @@ import {defineConfig, loadEnv} from 'vite';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
-    base: './',
+    base: '/',
     build: {
       outDir: 'dist',
       chunkSizeWarningLimit: 1200,
@@ -35,7 +35,7 @@ export default defineConfig(({mode}) => {
     ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY || ''),
-      'process.env': {},
+      'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production'),
     },
     resolve: {
       alias: {
