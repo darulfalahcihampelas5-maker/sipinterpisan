@@ -9639,14 +9639,15 @@ const targetCls = selectedClassFilter || stu.kelas;
           chaptersList.length > 0
             ? chaptersList
             : [
-                { id: "Bab 1 - Berpikir Komputasional", name: "Bab 1 - Berpikir Komputasional" },
-                { id: "Bab 2 - Teknologi Informasi dan Komunikasi", name: "Bab 2 - Teknologi Informasi dan Komunikasi" },
-                { id: "Bab 3 - Sistem Komputer", name: "Bab 3 - Sistem Komputer" },
-                { id: "Bab 4 - Jaringan Komputer dan Internet", name: "Bab 4 - Jaringan Komputer dan Internet" },
-                { id: "Bab 5 - Analisis Data", name: "Bab 5 - Analisis Data" },
-                { id: "Bab 6 - Algoritma dan Pemrograman", name: "Bab 6 - Algoritma dan Pemrograman" },
-                { id: "Bab 7 - Dampak Sosial Informatika", name: "Bab 7 - Dampak Sosial Informatika" },
-                { id: "Bab 8 - Praktik Lintas Bidang", name: "Bab 8 - Praktik Lintas Bidang" },
+                { id: "Informatika dan Keterampilan Generik", name: "Informatika dan Keterampilan Generik" },
+                { id: "Berpikir Komputasional", name: "Berpikir Komputasional" },
+                { id: "Teknologi Informasi dan Komunikasi", name: "Teknologi Informasi dan Komunikasi" },
+                { id: "Sistem Komputer", name: "Sistem Komputer" },
+                { id: "Jaringan Komputer dan Internet", name: "Jaringan Komputer dan Internet" },
+                { id: "Analisis Data", name: "Analisis Data" },
+                { id: "Algoritma dan Pemrograman", name: "Algoritma dan Pemrograman" },
+                { id: "Dampak Sosial Informatika", name: "Dampak Sosial Informatika" },
+                { id: "Praktik Lintas Bidang", name: "Praktik Lintas Bidang" },
               ]
         }
         classesList={classesList}
@@ -9666,4 +9667,9 @@ const targetCls = selectedClassFilter || stu.kelas;
       {/* Logout Confirmation Modal */}
       <LogoutModal
         isOpen={showLogoutModal}
- xœRP ƒü<çœüâTÛjM[;…âÔ’àŒürŸüôüÒßü”Ä´ÄœâTÍZ.¸Žü¼´Ì¢\ÛêŒÄ¼”œTˆb˜};0ÃF?%³ÄÔ´æªå   ÿÿ <a
+        onClose={() => setShowLogoutModal(false)}
+        onConfirm={handleLogout}
+      />
+    </div>
+  );
+}

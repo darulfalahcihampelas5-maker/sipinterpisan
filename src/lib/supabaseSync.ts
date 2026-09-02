@@ -267,6 +267,17 @@ function applyQueryFilters(collectionName: string, items: any[], queryOrCollecti
   return items;
 }
 
+function wrapSnapshot(docs: any[]) {
+  return {
+    docs,
+    empty: docs.length === 0,
+    size: docs.length,
+    forEach: (callback: any) => docs.forEach(callback),
+    map: (callback: any) => docs.map(callback),
+    filter: (callback: any) => docs.filter(callback),
+  };
+}
+
 // Transparent read wrapper: getDocs replacement
 export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
   const collectionName = getCollectionName(queryOrCollectionRef);
@@ -297,12 +308,7 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
             exists: () => true,
             data: () => item
           }));
-          return {
-            docs,
-            empty: docs.length === 0,
-            size: docs.length,
-            forEach: (callback: any) => docs.forEach(callback)
-          };
+          return wrapSnapshot(docs);
         }
       } else if (collectionName === "exams") {
         const { data, error } = await supabase.from("exams").select("*");
@@ -324,12 +330,7 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
             exists: () => true,
             data: () => item
           }));
-          return {
-            docs,
-            empty: docs.length === 0,
-            size: docs.length,
-            forEach: (callback: any) => docs.forEach(callback)
-          };
+          return wrapSnapshot(docs);
         }
       } else {
         // Generic app_collections table
@@ -349,12 +350,7 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
             exists: () => true,
             data: () => item
           }));
-          return {
-            docs,
-            empty: docs.length === 0,
-            size: docs.length,
-            forEach: (callback: any) => docs.forEach(callback)
-          };
+          return wrapSnapshot(docs);
         }
       }
     } catch (err: any) {
@@ -367,10 +363,10 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
     const snap = await getDocs(queryOrCollectionRef);
     
     // Auto-populate Supabase cache in the background
-    if (isSupabaseConfigured && supabase && !snap.empty && collectionName) {
+    if (isSupabaseConfigured && supabase && snap && !snap.empty && collectionName) {
       setTimeout(async () => {
         try {
-          if (collectionName !== "final_grades" && collectionName !== "exams") {
+          if (collectionName !== "final_grades" && collectionName !== "exams" && snap.docs) {
             const formatted = snap.docs.map((docSnap) => ({
               id: `${collectionName}_${docSnap.id}`,
               collection_name: collectionName,
@@ -385,10 +381,14 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
         }
       }, 50);
     }
-    return snap;
+    if (snap && typeof snap.forEach === "function") {
+      return snap;
+    }
+    const snapDocs = snap && Array.isArray(snap.docs) ? snap.docs : [];
+    return wrapSnapshot(snapDocs);
   } catch (err: any) {
     console.warn(`Firestore getDocs failed for ${collectionName}:`, err?.message || err);
-    return { docs: [], empty: true, size: 0 };
+    return wrapSnapshot([]);
   }
 }
 

@@ -178,18 +178,22 @@ export const AddManualColumnModal: React.FC<AddManualColumnModalProps> = ({
                 required
               >
                 <option value="" disabled>-- Pilih Bab --</option>
-                {chaptersList.map((ch: any) => (
-                  <option key={ch.id || ch.name} value={ch.name || ch.id}>
-                    {ch.name || ch.id}
-                  </option>
-                ))}
+                {chaptersList.map((ch: any) => {
+                  const rawName = ch.name || ch.id || "";
+                  const cleanName = rawName.replace(/^Bab\s*\d+\s*[-:.]\s*/i, "").trim();
+                  return (
+                    <option key={ch.id || ch.name} value={cleanName}>
+                      {cleanName}
+                    </option>
+                  );
+                })}
               </select>
             ) : (
               <input
                 type="text"
                 value={bab}
                 onChange={(e) => setBab(e.target.value)}
-                placeholder="Contoh: Bab 1 - Berpikir Komputasional"
+                placeholder="Contoh: Berpikir Komputasional"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#85cc00] focus:border-transparent font-medium"
                 required
               />
