@@ -38,10 +38,11 @@ export interface ExamItem {
 
 // 1. Fetch all Final Grades (Unlimited Reads from Supabase)
 export async function getFinalGrades(): Promise<GradeItem[]> {
+  // 1. Always Try Supabase First (Primary)
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase.from("final_grades").select("*");
-      if (!error && Array.isArray(data)) {
+      if (!error && Array.isArray(data) && data.length > 0) {
         return data.map((d) => ({
           id: d.id,
           assignmentId: d.assignment_id || d.exam_id,
@@ -58,15 +59,12 @@ export async function getFinalGrades(): Promise<GradeItem[]> {
           remedialScore: d.remedial_score,
         }));
       }
-      if (error) {
-        console.warn("Supabase fetch grades response note:", error.message);
-      }
     } catch (err) {
       console.warn("Supabase fetch grades exception:", err);
     }
   }
 
-  // Fallback to Firestore only if Supabase not configured
+  // 2. Fallback to Firestore only if Supabase fails or is empty
   try {
     const snap = await getDocs(collection(db, "final_grades"));
     return snap.docs.map((doc) => ({
@@ -74,7 +72,6 @@ export async function getFinalGrades(): Promise<GradeItem[]> {
       ...doc.data(),
     })) as GradeItem[];
   } catch (err: any) {
-    // Graceful handling of Firestore quota exhaustion
     console.warn("Firestore final_grades read bypassed:", err?.message || err);
     return [];
   }
@@ -82,6 +79,7 @@ export async function getFinalGrades(): Promise<GradeItem[]> {
 
 // 2. Fetch Exams (Unlimited Reads from Supabase)
 export async function getExams(): Promise<ExamItem[]> {
+  // 1. Always Try Supabase First (Primary)
   if (isSupabaseConfigured && supabase) {
     try {
       const { data, error } = await supabase.from("exams").select("*");
@@ -103,7 +101,7 @@ export async function getExams(): Promise<ExamItem[]> {
     }
   }
 
-  // Fallback to Firestore
+  // 2. Fallback to Firestore
   try {
     const snap = await getDocs(collection(db, "exams"));
     return snap.docs.map((doc) => ({
@@ -116,21 +114,13 @@ export async function getExams(): Promise<ExamItem[]> {
   }
 }
 
-// 3. Save a Final Grade (Saves to both, handles Supabase quota limits gracefully)
+// 3. Save a Final Grade (Saves to Supabase as primary, Firestore as background backup)
 export async function saveFinalGrade(grade: GradeItem): Promise<boolean> {
   const gradeId = grade.id || `${grade.assignmentId || grade.examId}_${grade.nisn}`;
 
-  // 1. Save to Firestore (Primary during Supabase limit)
-  let firestoreSuccess = false;
-  try {
-    const finalRef = doc(db, "final_grades", gradeId);
-    await setDoc(finalRef, grade, { merge: true });
-    firestoreSuccess = true;
-  } catch (err) {
-    console.warn("Firestore save grade bypassed:", err);
-  }
+  let supabaseSuccess = false;
 
-  // 2. Sync to Supabase (Secondary/Mirror)
+  // 1. Save to Supabase (Primary)
   if (isSupabaseConfigured && supabase) {
     try {
       const { error } = await supabase.from("final_grades").upsert({
@@ -149,15 +139,23 @@ export async function saveFinalGrade(grade: GradeItem): Promise<boolean> {
         remedial_score: grade.remedialScore || null,
       });
       
-      if (error && (error.code === '429' || error.message?.includes('limit'))) {
-        console.warn("Supabase Quota Reached. Data saved to Firebase only.");
+      if (!error) {
+        supabaseSuccess = true;
       }
     } catch (err) {
-      // Silent fail for Supabase
+      console.warn("Supabase save grade error:", err);
     }
   }
 
-  return firestoreSuccess;
+  // 2. Save to Firestore (Background Backup)
+  try {
+    const finalRef = doc(db, "final_grades", gradeId);
+    await setDoc(finalRef, grade, { merge: true });
+    return true; // Return true as long as one of them or Firebase worked
+  } catch (err) {
+    // If Firebase quota is reached but Supabase worked, we are still good
+    return supabaseSuccess;
+  }
 }
 
 // 4. Real-time Subscription (Zero Quota - WebSocket Stream)
