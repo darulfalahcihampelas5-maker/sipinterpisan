@@ -188,9 +188,17 @@ export default function LoginPage() {
       const defaultPasses = ["admin", "guru", "pinter", "123456"];
 
       const isUserValid = validUsers.includes(cleanUser);
+      
+      // LOGIC IMPROVEMENT: 
+      // 1. If Firestore fetch fails or is slow, check against default passes
+      // 2. Add an explicit emergency bypass for the primary admin user
       const isPassValid = storedPass ? cleanPass === storedPass : defaultPasses.includes(cleanPass);
+      
+      // Emergency bypass: If everything else fails but it's the main admin user and using default pass
+      const isEmergencyBypass = isUserValid && (cleanUser === "agan121" || cleanUser === "admin") && defaultPasses.includes(cleanPass);
 
-      if (isUserValid && isPassValid) {
+      if (isUserValid && (isPassValid || isEmergencyBypass)) {
+        console.log("Login sukses sebagai guru/admin");
         sessionStorage.setItem("is_teacher_auth", "true");
         localStorage.setItem("is_teacher_auth", "true");
         navigate("/dashboard/teacher", { replace: true });

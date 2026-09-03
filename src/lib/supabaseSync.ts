@@ -116,14 +116,24 @@ export async function getExams(): Promise<ExamItem[]> {
   }
 }
 
-// 3. Save a Final Grade (Saves to Supabase as primary, Firestore as secondary)
+// 3. Save a Final Grade (Saves to both, handles Supabase quota limits gracefully)
 export async function saveFinalGrade(grade: GradeItem): Promise<boolean> {
   const gradeId = grade.id || `${grade.assignmentId || grade.examId}_${grade.nisn}`;
 
-  // 1. Save to Supabase (primary)
+  // 1. Save to Firestore (Primary during Supabase limit)
+  let firestoreSuccess = false;
+  try {
+    const finalRef = doc(db, "final_grades", gradeId);
+    await setDoc(finalRef, grade, { merge: true });
+    firestoreSuccess = true;
+  } catch (err) {
+    console.warn("Firestore save grade bypassed:", err);
+  }
+
+  // 2. Sync to Supabase (Secondary/Mirror)
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from("final_grades").upsert({
+      const { error } = await supabase.from("final_grades").upsert({
         id: gradeId,
         exam_id: grade.examId || grade.assignmentId,
         assignment_id: grade.assignmentId || grade.examId,
@@ -138,20 +148,16 @@ export async function saveFinalGrade(grade: GradeItem): Promise<boolean> {
         is_remedial: grade.isRemedial || false,
         remedial_score: grade.remedialScore || null,
       });
+      
+      if (error && (error.code === '429' || error.message?.includes('limit'))) {
+        console.warn("Supabase Quota Reached. Data saved to Firebase only.");
+      }
     } catch (err) {
-      console.warn("Supabase save grade note:", err);
+      // Silent fail for Supabase
     }
   }
 
-  // 2. Save to Firestore (secondary safety backup if quota permits)
-  try {
-    const finalRef = doc(db, "final_grades", gradeId);
-    await setDoc(finalRef, grade, { merge: true });
-    return true;
-  } catch (err) {
-    // Quota reached on Firestore is ok since Supabase is the primary
-    return true;
-  }
+  return firestoreSuccess;
 }
 
 // 4. Real-time Subscription (Zero Quota - WebSocket Stream)
@@ -282,6 +288,7 @@ function wrapSnapshot(docs: any[]) {
 export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
   const collectionName = getCollectionName(queryOrCollectionRef);
 
+  // 1. Try Supabase first (Primary Source)
   if (isSupabaseConfigured && supabase && collectionName) {
     try {
       if (collectionName === "final_grades") {
@@ -308,7 +315,8 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
             exists: () => true,
             data: () => item
           }));
-          return wrapSnapshot(docs);
+          // If we found data in Supabase, return it and skip Firestore
+          if (docs.length > 0) return wrapSnapshot(docs);
         }
       } else if (collectionName === "exams") {
         const { data, error } = await supabase.from("exams").select("*");
@@ -330,7 +338,7 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
             exists: () => true,
             data: () => item
           }));
-          return wrapSnapshot(docs);
+          if (docs.length > 0) return wrapSnapshot(docs);
         }
       } else {
         // Generic app_collections table
@@ -358,7 +366,7 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
     }
   }
 
-  // Fallback: Read from Firestore
+  // 2. Fallback to Firestore (Secondary Source)
   try {
     const snap = await getDocs(queryOrCollectionRef);
     
@@ -387,6 +395,12 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
     const snapDocs = snap && Array.isArray(snap.docs) ? snap.docs : [];
     return wrapSnapshot(snapDocs);
   } catch (err: any) {
+    if (err?.message?.includes("Quota") || err?.code === "resource-exhausted") {
+      console.error("FIREBASE QUOTA EXCEEDED: Switched to Supabase offline-first mode.");
+      window.dispatchEvent(new CustomEvent('firestore-quota-exceeded', { 
+        detail: { message: "Kuota harian Firebase (50.000 baca) telah habis. Aplikasi SIPINTER kini otomatis beralih menggunakan Supabase sebagai database utama agar Anda tetap bisa mengajar." } 
+      }));
+    }
     console.warn(`Firestore getDocs failed for ${collectionName}:`, err?.message || err);
     return wrapSnapshot([]);
   }
@@ -401,6 +415,7 @@ export async function dbGetDoc(docRef: any): Promise<any> {
   const collectionName = pathSegments[0];
   const docId = pathSegments[1];
 
+  // 1. Try Supabase first (Primary Source)
   if (isSupabaseConfigured && supabase) {
     try {
       const id = `${collectionName}_${docId}`;
@@ -422,7 +437,7 @@ export async function dbGetDoc(docRef: any): Promise<any> {
     }
   }
 
-  // Fallback: Read from Firestore
+  // 2. Fallback to Firestore (Secondary Source)
   try {
     const snap = await getDoc(docRef);
     if (isSupabaseConfigured && supabase && snap.exists()) {
@@ -443,6 +458,9 @@ export async function dbGetDoc(docRef: any): Promise<any> {
     }
     return snap;
   } catch (err: any) {
+    if (err?.message?.includes("Quota") || err?.code === "resource-exhausted") {
+      console.error("FIREBASE QUOTA EXCEEDED (Doc Read): Switched to Supabase.");
+    }
     console.warn(`Firestore getDoc failed for ${collectionName}/${docId}:`, err?.message || err);
     return { exists: () => false, data: () => null };
   }
