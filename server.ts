@@ -16,11 +16,17 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
 import multer from 'multer';
 
-initializeApp({
-  storageBucket: "gen-lang-client-0391947162.firebasestorage.app"
-});
-const db = getFirestore();
-const bucket = getStorage().bucket();
+let db: any = null;
+let bucket: any = null;
+try {
+  initializeApp({
+    storageBucket: "gen-lang-client-0391947162.firebasestorage.app"
+  });
+  db = getFirestore();
+  bucket = getStorage().bucket();
+} catch (e) {
+  console.warn("[Firebase Admin] Initialization skipped or error:", e);
+}
 const upload = multer({ storage: multer.memoryStorage() });
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });

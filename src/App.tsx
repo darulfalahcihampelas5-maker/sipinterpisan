@@ -7,28 +7,10 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './AuthContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import LoginPage from './pages/LoginPage';
 
-const lazyWithRetry = (componentImport: () => Promise<any>) =>
-  lazy(async () => {
-    const pageRefreshed = JSON.parse(
-      window.sessionStorage.getItem('page-refreshed') || 'false'
-    );
-    try {
-      const component = await componentImport();
-      window.sessionStorage.setItem('page-refreshed', 'false');
-      return component;
-    } catch (error) {
-      if (!pageRefreshed) {
-        window.sessionStorage.setItem('page-refreshed', 'true');
-        window.location.reload();
-      }
-      throw error;
-    }
-  });
-
-const LoginPage = lazyWithRetry(() => import('./pages/LoginPage'));
-const DashboardTeacher = lazyWithRetry(() => import('./pages/DashboardTeacher'));
-const DashboardStudent = lazyWithRetry(() => import('./pages/DashboardStudent'));
+const DashboardTeacher = lazy(() => import('./pages/DashboardTeacher'));
+const DashboardStudent = lazy(() => import('./pages/DashboardStudent'));
 
 // Komponen loading fallback untuk UX pada jaringan lambat
 const LoadingScreen = () => (

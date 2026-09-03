@@ -9,25 +9,7 @@ export default defineConfig(({mode}) => {
     base: '/',
     build: {
       outDir: 'dist',
-      chunkSizeWarningLimit: 1200,
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('xlsx') || id.includes('exceljs')) {
-                return 'vendor-excel';
-              }
-              if (id.includes('jspdf') || id.includes('html2canvas')) {
-                return 'vendor-pdf';
-              }
-              if (id.includes('react') || id.includes('motion')) {
-                return 'vendor-react';
-              }
-              return 'vendor';
-            }
-          }
-        }
-      }
+      chunkSizeWarningLimit: 2500,
     },
     plugins: [
       react(), 
