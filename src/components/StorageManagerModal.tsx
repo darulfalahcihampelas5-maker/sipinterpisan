@@ -3,7 +3,8 @@ import { Trash2, X, Database, HardDrive, AlertTriangle, CheckCircle2, FileText }
 import { motion } from 'motion/react';
 import { db, storage } from '../lib/firebase';
 import { ref, deleteObject, getMetadata } from 'firebase/storage';
-import { deleteDoc, doc } from 'firebase/firestore';
+import { doc } from 'firebase/firestore';
+import { dbDeleteDoc as deleteDoc } from '../lib/supabaseSync';
 
 interface StorageManagerModalProps {
   isOpen: boolean;

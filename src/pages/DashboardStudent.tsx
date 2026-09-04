@@ -7,9 +7,8 @@ import {
   query,
   where,
   doc,
-  deleteDoc,
 } from "firebase/firestore";
-import { dbGetDocs as getDocs, dbGetDoc as getDoc, dbSetDoc as setDoc } from "../lib/supabaseSync";
+import { dbGetDocs as getDocs, dbGetDoc as getDoc, dbSetDoc as setDoc, dbDeleteDoc as deleteDoc } from "../lib/supabaseSync";
 import { db, auth, storage } from "../lib/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { getDriveImageUrl, getDrivePdfEmbedUrl } from "../lib/driveUtils";

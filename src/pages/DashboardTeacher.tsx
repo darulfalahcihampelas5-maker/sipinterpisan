@@ -8,13 +8,12 @@ import {
   doc,
   addDoc,
   collection,
-  deleteDoc,
   updateDoc,
   writeBatch,
   query,
   where,
 } from "firebase/firestore";
-import { dbGetDocs as getDocs, dbGetDoc as getDoc, dbSetDoc as setDoc } from "../lib/supabaseSync";
+import { dbGetDocs as getDocs, dbGetDoc as getDoc, dbSetDoc as setDoc, dbDeleteDoc as deleteDoc } from "../lib/supabaseSync";
 import { OperationType, handleFirestoreError, getLocalCache, setLocalCache, clearTeacherCaches } from "../lib/firestoreUtils";
 import { googleSignIn } from "../lib/googleAuth";
 import { fetchWithRetry } from "../lib/fetchWithRetry";
@@ -1401,10 +1400,8 @@ export default function DashboardTeacher() {
           trackUsage(snapshot.size, 0);
           const cls = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
           cls.sort((a: any, b: any) => (a.createdAt || "").localeCompare(b.createdAt || ""));
-          if (cls.length > 0) {
-            setClassesList(cls);
-            setLocalCache("firas_cache_classes", cls);
-          }
+          setClassesList(cls);
+          setLocalCache("firas_cache_classes", cls);
         } catch (e) {
           console.warn("Failed fetching classes:", e);
         }
@@ -3816,20 +3813,36 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
     }
   };
 
-  const handleDeleteClass = async (id: string) => {
+  const handleDeleteClass = async (id: string, className?: string) => {
+    const targetName = className || id;
+    const studentCount = studentsList.filter((s) => s.kelas === targetName).length;
+    const confirmMessage =
+      studentCount > 0
+        ? `Kelas "${targetName}" memiliki ${studentCount} siswa terdaftar. Apakah Anda yakin ingin menghapus kelas ini?`
+        : `Apakah Anda yakin ingin menghapus kelas "${targetName}"?`;
+
     showConfirm(
       "Hapus Kelas",
-      "Apakah Anda yakin ingin menghapus kelas ini?",
+      confirmMessage,
       async () => {
         try {
+          // Optimistic UI update
+          setClassesList((prev) => prev.filter((c) => c.id !== id && c.name !== targetName));
+          localStorage.removeItem("firas_cache_classes");
+
           await deleteDoc(doc(db, "classes", id));
+          if (className && className !== id) {
+            try {
+              await deleteDoc(doc(db, "classes", className));
+            } catch (_) {}
+          }
+
           setClassSaveMessage({
-            text: "Kelas berhasil dihapus.",
+            text: `Kelas "${targetName}" berhasil dihapus.`,
             type: "success",
           });
-          showAlert("Berhasil", "Kelas berhasil dihapus dari sistem.", "alert");
-          localStorage.removeItem("firas_cache_classes");
-          fetchTeacherData(false);
+          showAlert("Berhasil", `Kelas "${targetName}" berhasil dihapus dari sistem.`, "alert");
+          fetchTeacherData(true);
         } catch (error) {
           setClassSaveMessage({
             text: "Gagal menghapus kelas.",
@@ -3837,6 +3850,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
           });
           showAlert("Gagal", "Terjadi kesalahan saat menghapus kelas.", "danger");
           handleFirestoreError(error, OperationType.DELETE, `classes/${id}`);
+          fetchTeacherData(true);
         }
       },
       "Hapus",
@@ -3865,6 +3879,8 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
         type: "success",
       });
       showAlert("Berhasil", "Perubahan nama kelas berhasil disimpan.", "alert");
+      localStorage.removeItem("firas_cache_classes");
+      fetchTeacherData(true);
     } catch (error) {
       setClassSaveMessage({
         text: "Gagal mengubah kelas.",
@@ -5458,13 +5474,53 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                     const studentCount = studentsList.filter(s => s.kelas === cls.name).length;
                                     return (
                                       <div key={`cls-card-${cls.id || cls.name || idx}-${idx}`} className="flex justify-between items-center p-4 border border-slate-100 rounded-xl hover:border-[#85cc00]/30 hover:bg-slate-50 transition-all">
-                                        <div>
-                                          <p className="font-bold text-slate-900 text-lg">{cls.name}</p>
-                                          <p className="text-slate-500 text-sm font-medium">{studentCount} Siswa</p>
-                                        </div>
-                                        <button onClick={() => handleDeleteClass(cls.id)} className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
-                                          Hapus
-                                        </button>
+                                        {editingClassId === cls.id ? (
+                                          <div className="flex-1 flex items-center gap-2 mr-3">
+                                            <input
+                                              type="text"
+                                              value={editingClassName}
+                                              onChange={(e) => setEditingClassName(e.target.value)}
+                                              className="w-full p-2 text-sm border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#85cc00] outline-none font-semibold text-slate-800"
+                                              placeholder="Nama kelas..."
+                                              autoFocus
+                                            />
+                                            <button
+                                              onClick={handleSaveEditClass}
+                                              className="bg-[#85cc00] hover:bg-[#74b300] text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors whitespace-nowrap"
+                                            >
+                                              Simpan
+                                            </button>
+                                            <button
+                                              onClick={() => { setEditingClassId(null); setEditingClassName(""); }}
+                                              className="text-slate-500 hover:bg-slate-200 px-2 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                                            >
+                                              Batal
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div>
+                                            <p className="font-bold text-slate-900 text-lg">{cls.name}</p>
+                                            <p className="text-slate-500 text-sm font-medium">{studentCount} Siswa</p>
+                                          </div>
+                                        )}
+                                        {editingClassId !== cls.id && (
+                                          <div className="flex items-center gap-1">
+                                            <button
+                                              onClick={() => handleEditClass(cls.id, cls.name)}
+                                              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                                            >
+                                              <Edit className="w-3.5 h-3.5" />
+                                              Edit
+                                            </button>
+                                            <button
+                                              onClick={() => handleDeleteClass(cls.id, cls.name)}
+                                              className="text-rose-500 hover:text-rose-600 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                              Hapus
+                                            </button>
+                                          </div>
+                                        )}
                                       </div>
                                     );
                                   })

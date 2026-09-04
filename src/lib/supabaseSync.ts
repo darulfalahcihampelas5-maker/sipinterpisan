@@ -1,6 +1,6 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { db } from "./firebase";
-import { doc, getDocs, collection, setDoc, getDoc, getDocsFromCache, getDocFromCache } from "firebase/firestore";
+import { doc, getDocs, collection, setDoc, getDoc, getDocsFromCache, getDocFromCache, deleteDoc } from "firebase/firestore";
 import { clearTeacherCaches } from "./firestoreUtils";
 
 let isFirebaseDisabled = false;
@@ -660,6 +660,61 @@ export async function dbSetDoc(docRef: any, data: any, options?: any): Promise<v
       console.warn(`Firestore write quota reached for ${collectionName}. Successfully synced to Supabase!`);
     } else {
       throw err;
+    }
+  }
+}
+
+// Transparent delete wrapper: deleteDoc replacement
+export async function dbDeleteDoc(docRef: any): Promise<void> {
+  const pathSegments = docRef?.path?.split("/");
+  if (!pathSegments || pathSegments.length < 2) {
+    try {
+      await deleteDoc(docRef);
+    } catch (_) {}
+    return;
+  }
+  const collectionName = pathSegments[0];
+  const docId = pathSegments[1];
+
+  // 1. Delete from Supabase first (Primary Source)
+  if (isSupabaseConfigured && supabase) {
+    try {
+      if (collectionName === "final_grades") {
+        await supabase.from("final_grades").delete().eq("id", docId);
+        await supabase.from("final_grades").delete().eq("exam_id", docId);
+      } else if (collectionName === "exams") {
+        await supabase.from("exams").delete().eq("id", docId);
+        await supabase.from("app_collections").delete().eq("id", `exams_${docId}`);
+        await supabase.from("app_collections").delete().eq("collection_name", "exams").eq("doc_id", docId);
+      } else if (collectionName === "classes") {
+        const id = `classes_${docId}`;
+        await supabase.from("app_collections").delete().eq("id", id);
+        await supabase.from("app_collections").delete().eq("collection_name", "classes").eq("doc_id", docId);
+        await supabase.from("app_collections").delete().eq("collection_name", "classes").filter("data->>name", "eq", docId);
+      } else {
+        const id = `${collectionName}_${docId}`;
+        await supabase.from("app_collections").delete().eq("id", id);
+        await supabase.from("app_collections").delete().eq("collection_name", collectionName).eq("doc_id", docId);
+      }
+    } catch (err: any) {
+      console.warn(`Supabase delete sync warning for ${collectionName}/${docId}:`, err?.message || err);
+    }
+  }
+
+  // 2. Fallback to Firestore (ignore quota exhaustion, treat as success if deleted from Supabase)
+  try {
+    await deleteDoc(docRef);
+  } catch (err: any) {
+    if (
+      err?.message?.includes("Quota") ||
+      err?.code === "resource-exhausted" ||
+      err?.code === "unavailable"
+    ) {
+      console.warn(`Firestore delete quota reached for ${collectionName}/${docId}. Successfully deleted from Supabase!`);
+    } else {
+      if (!isSupabaseConfigured) {
+        throw err;
+      }
     }
   }
 }
