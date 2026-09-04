@@ -1391,9 +1391,9 @@ export default function DashboardTeacher() {
   const fetchTeacherData = async (forceRefresh = false) => {
     setIsRefreshingTeacherData(true);
     try {
-      // 1. Classes (rarely changes, always cache first unless missing)
-      const cachedClasses = getLocalCache<any[]>("firas_cache_classes", 12 * 60 * 60 * 1000);
-      if (cachedClasses) {
+      // 1. Classes (rarely changes, always cache first unless missing or forceRefresh)
+      const cachedClasses = !forceRefresh && getLocalCache<any[]>("firas_cache_classes", 12 * 60 * 60 * 1000);
+      if (cachedClasses && cachedClasses.length > 0) {
         setClassesList(cachedClasses);
       } else {
         try {
@@ -1401,43 +1401,56 @@ export default function DashboardTeacher() {
           trackUsage(snapshot.size, 0);
           const cls = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
           cls.sort((a: any, b: any) => (a.createdAt || "").localeCompare(b.createdAt || ""));
-          setClassesList(cls);
-          setLocalCache("firas_cache_classes", cls);
+          if (cls.length > 0) {
+            setClassesList(cls);
+            setLocalCache("firas_cache_classes", cls);
+          }
         } catch (e) {
           console.warn("Failed fetching classes:", e);
         }
       }
 
-      // 2. Students (rarely changes, always cache first unless missing)
-      const cachedStudents = getLocalCache<any[]>("firas_cache_students", 12 * 60 * 60 * 1000);
-      if (cachedStudents) {
+      // 2. Students (rarely changes, always cache first unless missing or forceRefresh)
+      const cachedStudents = !forceRefresh && getLocalCache<any[]>("firas_cache_students", 12 * 60 * 60 * 1000);
+      if (cachedStudents && cachedStudents.length > 0) {
         setStudentsList(cachedStudents);
       } else {
         try {
           const snapshot = await getDocs(collection(db, "studentsByNisn"));
           trackUsage(snapshot.size, 0);
           const studs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-          studs.sort((a: any, b: any) => {
-            const classA = (a.kelas || "").toString();
-            const classB = (b.kelas || "").toString();
-            const classComp = classA.localeCompare(classB, "id", { numeric: true, sensitivity: "base" });
-            if (classComp !== 0) return classComp;
-            return (a.displayName || a.studentName || "").localeCompare(
-              b.displayName || b.studentName || "",
-              "id",
-              { sensitivity: "base" }
-            );
-          });
-          setStudentsList(studs);
-          setLocalCache("firas_cache_students", studs);
+          if (studs.length > 0) {
+            studs.sort((a: any, b: any) => {
+              const classA = (a.kelas || "").toString();
+              const classB = (b.kelas || "").toString();
+              const classComp = classA.localeCompare(classB, "id", { numeric: true, sensitivity: "base" });
+              if (classComp !== 0) return classComp;
+              return (a.displayName || a.studentName || "").localeCompare(
+                b.displayName || b.studentName || "",
+                "id",
+                { sensitivity: "base" }
+              );
+            });
+            setStudentsList(studs);
+            setLocalCache("firas_cache_students", studs);
+          } else {
+            const fallbackCached = getLocalCache<any[]>("firas_cache_students", Infinity);
+            if (fallbackCached && fallbackCached.length > 0) {
+              setStudentsList(fallbackCached);
+            }
+          }
         } catch (e) {
           console.warn("Failed fetching students:", e);
+          const fallbackCached = getLocalCache<any[]>("firas_cache_students", Infinity);
+          if (fallbackCached && fallbackCached.length > 0) {
+            setStudentsList(fallbackCached);
+          }
         }
       }
 
-      // 3. Assignments (rarely changes, always cache first unless missing)
-      const cachedAssignments = getLocalCache<any[]>("firas_cache_assignments", 12 * 60 * 60 * 1000);
-      if (cachedAssignments) {
+      // 3. Assignments (rarely changes, always cache first unless missing or forceRefresh)
+      const cachedAssignments = !forceRefresh && getLocalCache<any[]>("firas_cache_assignments", 12 * 60 * 60 * 1000);
+      if (cachedAssignments && cachedAssignments.length > 0) {
         setAssignmentsList(cachedAssignments);
       } else {
         try {
@@ -1449,8 +1462,10 @@ export default function DashboardTeacher() {
             const dateB = new Date(b.publishedAt || b.createdAt || 0).getTime();
             return dateB - dateA;
           });
-          setAssignmentsList(tasks);
-          setLocalCache("firas_cache_assignments", tasks);
+          if (tasks.length > 0) {
+            setAssignmentsList(tasks);
+            setLocalCache("firas_cache_assignments", tasks);
+          }
         } catch (e) {
           console.warn("Failed fetching assignments:", e);
         }
@@ -1459,7 +1474,7 @@ export default function DashboardTeacher() {
       // 4. Submissions (Solution B: Targeted Query for last 7 days OR status != "sudah dinilai")
       // Highly dynamic, obeys forceRefresh
       const cachedSubmissions = !forceRefresh && getLocalCache<any[]>("firas_cache_submissions", 10 * 60 * 1000);
-      if (cachedSubmissions) {
+      if (cachedSubmissions && cachedSubmissions.length > 0) {
         setSubmissionsList(cachedSubmissions);
       } else {
         try {
@@ -1492,8 +1507,10 @@ export default function DashboardTeacher() {
           const subs = Array.from(mergedDocs.values());
           trackUsage(snapRecent.size + snapPending.size, 0);
 
-          setSubmissionsList(subs);
-          setLocalCache("firas_cache_submissions", subs);
+          if (subs.length > 0) {
+            setSubmissionsList(subs);
+            setLocalCache("firas_cache_submissions", subs);
+          }
         } catch (e) {
           console.warn("Failed fetching submissions with targeted query:", e);
         }
@@ -1501,36 +1518,40 @@ export default function DashboardTeacher() {
 
       // 5. Final Grades (Supabase primary + Firestore fallback, unlimited reads)
       const cachedFinalGrades = !forceRefresh && getLocalCache<any[]>("firas_cache_final_grades", 10 * 60 * 1000);
-      if (cachedFinalGrades) {
+      if (cachedFinalGrades && cachedFinalGrades.length > 0) {
         setFinalGradesList(cachedFinalGrades);
       } else {
         try {
           const grades = await getFinalGrades();
-          setFinalGradesList(grades);
-          setLocalCache("firas_cache_final_grades", grades);
+          if (grades.length > 0) {
+            setFinalGradesList(grades);
+            setLocalCache("firas_cache_final_grades", grades);
+          }
         } catch (e) {
           console.warn("Failed fetching final grades:", e);
         }
       }
 
-      // 6. Chapters (Static, always cache first)
-      const cachedChapters = getLocalCache<any[]>("firas_cache_chapters", 24 * 60 * 60 * 1000);
-      if (cachedChapters) {
+      // 6. Chapters (Static, always cache first unless forceRefresh)
+      const cachedChapters = !forceRefresh && getLocalCache<any[]>("firas_cache_chapters", 24 * 60 * 60 * 1000);
+      if (cachedChapters && cachedChapters.length > 0) {
         setChaptersList(cachedChapters);
       } else {
         try {
           const snapshot = await getDocs(collection(db, "chapters"));
           const chaps = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-          setChaptersList(chaps);
-          setLocalCache("firas_cache_chapters", chaps);
+          if (chaps.length > 0) {
+            setChaptersList(chaps);
+            setLocalCache("firas_cache_chapters", chaps);
+          }
         } catch (e) {
           console.warn("Failed fetching chapters:", e);
         }
       }
 
-      // 7. Exams (Static, always cache first)
-      const cachedExams = getLocalCache<any[]>("firas_cache_exams", 12 * 60 * 60 * 1000);
-      if (cachedExams) {
+      // 7. Exams (Static, always cache first unless forceRefresh)
+      const cachedExams = !forceRefresh && getLocalCache<any[]>("firas_cache_exams", 12 * 60 * 60 * 1000);
+      if (cachedExams && cachedExams.length > 0) {
         setExamsList(cachedExams);
       } else {
         try {
@@ -1542,16 +1563,18 @@ export default function DashboardTeacher() {
             const dateB = new Date(b.createdAt || 0).getTime();
             return dateB - dateA;
           });
-          setExamsList(exams);
-          setLocalCache("firas_cache_exams", exams);
+          if (exams.length > 0) {
+            setExamsList(exams);
+            setLocalCache("firas_cache_exams", exams);
+          }
         } catch (e) {
           console.warn("Failed fetching exams:", e);
         }
       }
 
-      // 8. Announcements (rarely changes, always cache first unless stale)
-      const cachedAnnouncements = getLocalCache<any[]>("firas_cache_announcements", 2 * 60 * 60 * 1000);
-      if (cachedAnnouncements) {
+      // 8. Announcements (rarely changes, always cache first unless stale or forceRefresh)
+      const cachedAnnouncements = !forceRefresh && getLocalCache<any[]>("firas_cache_announcements", 2 * 60 * 60 * 1000);
+      if (cachedAnnouncements && cachedAnnouncements.length > 0) {
         setAnnouncementsList(cachedAnnouncements);
       } else {
         try {
@@ -1563,8 +1586,10 @@ export default function DashboardTeacher() {
             const dateB = new Date(b.createdAt || 0).getTime();
             return dateB - dateA;
           });
-          setAnnouncementsList(anns);
-          setLocalCache("firas_cache_announcements", anns);
+          if (anns.length > 0) {
+            setAnnouncementsList(anns);
+            setLocalCache("firas_cache_announcements", anns);
+          }
         } catch (e) {
           console.warn("Failed fetching announcements:", e);
         }
@@ -1572,23 +1597,25 @@ export default function DashboardTeacher() {
 
       // 9. Absensi (Dynamic, obeys forceRefresh)
       const cachedAbsensi = !forceRefresh && getLocalCache<any[]>("firas_cache_absensi", 15 * 60 * 1000);
-      if (cachedAbsensi) {
+      if (cachedAbsensi && cachedAbsensi.length > 0) {
         setAbsensiList(cachedAbsensi);
       } else {
         try {
           const snapshot = await getDocs(collection(db, "absensi"));
           trackUsage(snapshot.size, 0);
           const abs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-          setAbsensiList(abs);
-          setLocalCache("firas_cache_absensi", abs);
+          if (abs.length > 0) {
+            setAbsensiList(abs);
+            setLocalCache("firas_cache_absensi", abs);
+          }
         } catch (e) {
           console.warn("Failed fetching absensi:", e);
         }
       }
 
-      // 10. Materials (Static, always cache first)
-      const cachedMaterials = getLocalCache<any[]>("firas_cache_materials", 12 * 60 * 60 * 1000);
-      if (cachedMaterials) {
+      // 10. Materials (Static, always cache first unless forceRefresh)
+      const cachedMaterials = !forceRefresh && getLocalCache<any[]>("firas_cache_materials", 12 * 60 * 60 * 1000);
+      if (cachedMaterials && cachedMaterials.length > 0) {
         setMaterialsList(cachedMaterials);
       } else {
         try {
@@ -1601,15 +1628,17 @@ export default function DashboardTeacher() {
             const dateB = new Date(b.createdAt || 0).getTime();
             return dateB - dateA;
           });
-          setMaterialsList(mat);
-          setLocalCache("firas_cache_materials", mat);
+          if (mat.length > 0) {
+            setMaterialsList(mat);
+            setLocalCache("firas_cache_materials", mat);
+          }
         } catch (e) {
           console.warn("Failed fetching materials:", e);
         }
       }
 
-      // 11. Rubric (Static, always cache first)
-      const cachedRubric = getLocalCache<any>("firas_cache_rubric", 24 * 60 * 60 * 1000);
+      // 11. Rubric (Static, always cache first unless forceRefresh)
+      const cachedRubric = !forceRefresh && getLocalCache<any>("firas_cache_rubric", 24 * 60 * 60 * 1000);
       if (cachedRubric) {
         setRubric(cachedRubric);
         setEditKehadiran(String(cachedRubric.kehadiran ?? 20));

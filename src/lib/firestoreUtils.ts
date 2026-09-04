@@ -59,9 +59,15 @@ export function getLocalCache<T>(key: string, maxAgeMs: number = 30 * 60 * 1000)
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object' && 'timestamp' in parsed && 'data' in parsed) {
       if (Date.now() - parsed.timestamp < maxAgeMs) {
+        if (Array.isArray(parsed.data) && parsed.data.length === 0) {
+          return null; // Empty array in cache is invalid / stale
+        }
         return parsed.data as T;
       }
       return null; // expired
+    }
+    if (Array.isArray(parsed) && parsed.length === 0) {
+      return null;
     }
     return parsed as T; // legacy un-timestamped cache
   } catch (e) {
@@ -71,6 +77,10 @@ export function getLocalCache<T>(key: string, maxAgeMs: number = 30 * 60 * 1000)
 
 export function setLocalCache<T>(key: string, data: T): void {
   try {
+    // Safety guard: Never cache an empty array
+    if (Array.isArray(data) && data.length === 0) {
+      return;
+    }
     localStorage.setItem(key, JSON.stringify({
       timestamp: Date.now(),
       data

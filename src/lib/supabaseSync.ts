@@ -1,6 +1,9 @@
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { db } from "./firebase";
-import { doc, getDocs, collection, setDoc, getDoc } from "firebase/firestore";
+import { doc, getDocs, collection, setDoc, getDoc, getDocsFromCache, getDocFromCache } from "firebase/firestore";
+import { clearTeacherCaches } from "./firestoreUtils";
+
+let isFirebaseDisabled = false;
 
 /**
  * Service to sync & read high-volume data (Grades & CBT Exams) with Supabase
@@ -65,6 +68,8 @@ export async function getFinalGrades(): Promise<GradeItem[]> {
   }
 
   // 2. Fallback to Firestore only if Supabase fails or is empty
+  if (isFirebaseDisabled) return [];
+  
   try {
     const snap = await getDocs(collection(db, "final_grades"));
     return snap.docs.map((doc) => ({
@@ -72,7 +77,9 @@ export async function getFinalGrades(): Promise<GradeItem[]> {
       ...doc.data(),
     })) as GradeItem[];
   } catch (err: any) {
-    console.warn("Firestore final_grades read bypassed:", err?.message || err);
+    if (err?.message?.includes("Quota") || err?.code === "resource-exhausted") {
+      isFirebaseDisabled = true;
+    }
     return [];
   }
 }
@@ -102,6 +109,8 @@ export async function getExams(): Promise<ExamItem[]> {
   }
 
   // 2. Fallback to Firestore
+  if (isFirebaseDisabled) return [];
+
   try {
     const snap = await getDocs(collection(db, "exams"));
     return snap.docs.map((doc) => ({
@@ -109,7 +118,9 @@ export async function getExams(): Promise<ExamItem[]> {
       ...doc.data(),
     })) as ExamItem[];
   } catch (err: any) {
-    console.warn("Firestore exams read bypassed:", err?.message || err);
+    if (err?.message?.includes("Quota") || err?.code === "resource-exhausted") {
+      isFirebaseDisabled = true;
+    }
     return [];
   }
 }
@@ -148,11 +159,16 @@ export async function saveFinalGrade(grade: GradeItem): Promise<boolean> {
   }
 
   // 2. Save to Firestore (Background Backup)
+  if (isFirebaseDisabled) return supabaseSuccess;
+
   try {
     const finalRef = doc(db, "final_grades", gradeId);
     await setDoc(finalRef, grade, { merge: true });
     return true; // Return true as long as one of them or Firebase worked
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.message?.includes("Quota") || err?.code === "resource-exhausted") {
+      isFirebaseDisabled = true;
+    }
     // If Firebase quota is reached but Supabase worked, we are still good
     return supabaseSuccess;
   }
@@ -208,63 +224,69 @@ export function subscribeToFinalGrades(
 // Helper to extract collection name from Query/CollectionRef
 function getCollectionName(queryOrCollection: any): string {
   if (!queryOrCollection) return "";
-  if (typeof queryOrCollection.path === "string") {
+  if (typeof queryOrCollection.path === "string" && queryOrCollection.path.length > 0) {
     return queryOrCollection.path;
   }
   if (queryOrCollection._query && queryOrCollection._query.path) {
     const segments = queryOrCollection._query.path.segments;
-    if (Array.isArray(segments)) return segments.join("/");
+    if (Array.isArray(segments) && segments.length > 0) return segments.join("/");
+  }
+  if (typeof queryOrCollection.id === "string" && queryOrCollection.id.length > 0) {
+    return queryOrCollection.id;
   }
   return "";
 }
 
 // Helper to filter items client-side using Firebase Query filters
 function applyQueryFilters(collectionName: string, items: any[], queryOrCollection: any): any[] {
-  if (typeof queryOrCollection.path === "string") {
+  const _query = queryOrCollection?._query;
+  if (!_query || !Array.isArray(_query.filters) || _query.filters.length === 0) {
     return items;
   }
   try {
-    const _query = queryOrCollection._query;
-    if (_query && Array.isArray(_query.filters)) {
-      let filtered = [...items];
-      for (const filter of _query.filters) {
-        const fieldSegments = filter.field?.segments;
-        const fieldName = Array.isArray(fieldSegments) ? fieldSegments[0] : null;
-        const op = filter.op;
-        
-        let filterVal = filter.value?.stringValue ?? filter.value?.integerValue ?? filter.value;
-        if (filter.value && typeof filter.value === "object") {
-          const keys = Object.keys(filter.value);
-          if (keys.length === 1 && keys[0].endsWith("Value")) {
-            filterVal = filter.value[keys[0]];
-          }
-        }
-        
-        if (fieldName && op && filterVal !== undefined) {
-          filtered = filtered.filter(item => {
-            const itemVal = item[fieldName];
-            // Normalize values for comparison
-            const sItemVal = itemVal === null || itemVal === undefined ? "" : String(itemVal).toLowerCase().trim();
-            const sFilterVal = String(filterVal).toLowerCase().trim();
-            
-            if (op === "==" || op === "EQUAL") {
-              return sItemVal === sFilterVal;
-            }
-            if (op === "!=" || op === "NOT_EQUAL") {
-              return sItemVal !== sFilterVal;
-            }
-            if (op === ">=" || op === "GREATER_THAN_OR_EQUAL") {
-              return Number(itemVal) >= Number(filterVal);
-            }
-            if (op === "<=" || op === "LESS_THAN_OR_EQUAL") {
-              return Number(itemVal) <= Number(filterVal);
-            }
-            return true;
-          });
+    let filtered = [...items];
+    for (const filter of _query.filters) {
+      const fieldSegments = filter.field?.segments;
+      const fieldName = Array.isArray(fieldSegments) ? fieldSegments[0] : (typeof filter.field === "string" ? filter.field : null);
+      const op = filter.op;
+      
+      let filterVal = filter.value?.stringValue ?? filter.value?.integerValue ?? filter.value?.booleanValue ?? filter.value;
+      if (filter.value && typeof filter.value === "object" && !filter.value.stringValue && !filter.value.integerValue && !filter.value.booleanValue) {
+        const keys = Object.keys(filter.value);
+        if (keys.length === 1 && keys[0].endsWith("Value")) {
+          filterVal = filter.value[keys[0]];
         }
       }
-      return filtered;
+      
+      if (fieldName && op && filterVal !== undefined) {
+        filtered = filtered.filter(item => {
+          const itemVal = item[fieldName];
+          const sItemVal = itemVal === null || itemVal === undefined ? "" : String(itemVal).toLowerCase().trim();
+          const sFilterVal = String(filterVal).toLowerCase().trim();
+          
+          if (op === "==" || op === "EQUAL") {
+            return sItemVal === sFilterVal;
+          }
+          if (op === "!=" || op === "NOT_EQUAL") {
+            return sItemVal !== sFilterVal;
+          }
+          if (op === ">=" || op === "GREATER_THAN_OR_EQUAL") {
+            return Number(itemVal) >= Number(filterVal);
+          }
+          if (op === "<=" || op === "LESS_THAN_OR_EQUAL") {
+            return Number(itemVal) <= Number(filterVal);
+          }
+          if (op === ">" || op === "GREATER_THAN") {
+            return Number(itemVal) > Number(filterVal);
+          }
+          if (op === "<" || op === "LESS_THAN") {
+            return Number(itemVal) < Number(filterVal);
+          }
+          return true;
+        });
+      }
     }
+    return filtered;
   } catch (err) {
     console.warn("Failed parsing query filters, returning all items:", err);
   }
@@ -290,7 +312,7 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
   if (isSupabaseConfigured && supabase && collectionName) {
     try {
       if (collectionName === "final_grades") {
-        const { data, error } = await supabase.from("final_grades").select("*");
+        const { data, error } = await supabase.from("final_grades").select("*").limit(5000);
         if (!error && Array.isArray(data)) {
           const formatted = data.map((d) => ({
             id: d.id,
@@ -317,7 +339,7 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
           if (docs.length > 0) return wrapSnapshot(docs);
         }
       } else if (collectionName === "exams") {
-        const { data, error } = await supabase.from("exams").select("*");
+        const { data, error } = await supabase.from("exams").select("*").limit(1000);
         if (!error && Array.isArray(data)) {
           const formatted = data.map((d) => ({
             id: d.id,
@@ -343,7 +365,8 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
         const { data, error } = await supabase
           .from("app_collections")
           .select("doc_id, data")
-          .eq("collection_name", collectionName);
+          .eq("collection_name", collectionName)
+          .limit(5000);
 
         if (!error && Array.isArray(data) && data.length > 0) {
           const formatted = data.map((item: any) => ({
@@ -364,16 +387,37 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
     }
   }
 
-  // 2. Fallback to Firestore (Secondary Source)
+  // 2. Fallback to Firestore (Secondary Source) or Offline Persistent Cache
   try {
-    const snap = await getDocs(queryOrCollectionRef);
+    let snap: any = null;
+    if (!isFirebaseDisabled) {
+      try {
+        snap = await getDocs(queryOrCollectionRef);
+      } catch (networkErr: any) {
+        if (networkErr?.message?.includes("Quota") || networkErr?.code === "resource-exhausted" || networkErr?.code === "unavailable") {
+          isFirebaseDisabled = true;
+        }
+      }
+    }
+
+    // Try reading from Firestore local persistent cache (IndexedDB)
+    if (!snap || snap.empty) {
+      try {
+        const cacheSnap = await getDocsFromCache(queryOrCollectionRef);
+        if (cacheSnap && !cacheSnap.empty) {
+          snap = cacheSnap;
+        }
+      } catch (_) {
+        // cache read error is ignored
+      }
+    }
     
-    // Auto-populate Supabase cache in the background
+    // Auto-populate Supabase cache in the background if we got data
     if (isSupabaseConfigured && supabase && snap && !snap.empty && collectionName) {
       setTimeout(async () => {
         try {
           if (collectionName !== "final_grades" && collectionName !== "exams" && snap.docs) {
-            const formatted = snap.docs.map((docSnap) => ({
+            const formatted = snap.docs.map((docSnap: any) => ({
               id: `${collectionName}_${docSnap.id}`,
               collection_name: collectionName,
               doc_id: docSnap.id,
@@ -383,25 +427,53 @@ export async function dbGetDocs(queryOrCollectionRef: any): Promise<any> {
             await supabase.from("app_collections").upsert(formatted, { onConflict: "id" });
           }
         } catch (err) {
-          console.warn(`Background auto-cache to Supabase for ${collectionName} failed:`, err);
+          // background sync fail is ok
         }
       }, 50);
     }
-    if (snap && typeof snap.forEach === "function") {
+
+    if (snap && typeof snap.forEach === "function" && snap.docs && snap.docs.length > 0) {
       return snap;
     }
+
     const snapDocs = snap && Array.isArray(snap.docs) ? snap.docs : [];
-    return wrapSnapshot(snapDocs);
+    if (snapDocs.length > 0) {
+      return wrapSnapshot(snapDocs);
+    }
   } catch (err: any) {
     if (err?.message?.includes("Quota") || err?.code === "resource-exhausted") {
-      console.error("FIREBASE QUOTA EXCEEDED: Switched to Supabase offline-first mode.");
-      window.dispatchEvent(new CustomEvent('firestore-quota-exceeded', { 
-        detail: { message: "Kuota harian Firebase (50.000 baca) telah habis. Aplikasi SIPINTER kini otomatis beralih menggunakan Supabase sebagai database utama agar Anda tetap bisa mengajar." } 
-      }));
+      isFirebaseDisabled = true;
     }
-    console.warn(`Firestore getDocs failed for ${collectionName}:`, err?.message || err);
-    return wrapSnapshot([]);
   }
+
+  // 3. Fallback to localStorage backup if available
+  if (collectionName) {
+    try {
+      const localKey = collectionName === "studentsByNisn" ? "firas_cache_students" : `firas_cache_${collectionName}`;
+      const rawCached = localStorage.getItem(localKey);
+      if (rawCached) {
+        const parsed = JSON.parse(rawCached);
+        let items: any[] = [];
+        if (Array.isArray(parsed)) {
+          items = parsed;
+        } else if (parsed && typeof parsed === "object" && Array.isArray(parsed.data)) {
+          items = parsed.data;
+        }
+
+        if (items.length > 0) {
+          const filtered = applyQueryFilters(collectionName, items, queryOrCollectionRef);
+          const docs = filtered.map((item: any) => ({
+            id: item.id || item.nisn || item.docId,
+            exists: () => true,
+            data: () => item,
+          }));
+          return wrapSnapshot(docs);
+        }
+      }
+    } catch (_) {}
+  }
+
+  return wrapSnapshot([]);
 }
 
 // Transparent read wrapper: getDoc replacement
@@ -435,33 +507,52 @@ export async function dbGetDoc(docRef: any): Promise<any> {
     }
   }
 
-  // 2. Fallback to Firestore (Secondary Source)
+  // 2. Fallback to Firestore (Secondary Source) or Offline Persistent Cache
   try {
-    const snap = await getDoc(docRef);
-    if (isSupabaseConfigured && supabase && snap.exists()) {
-      setTimeout(async () => {
-        try {
-          const id = `${collectionName}_${docId}`;
-          await supabase.from("app_collections").upsert({
-            id,
-            collection_name: collectionName,
-            doc_id: docId,
-            data: snap.data(),
-            updated_at: new Date().toISOString()
-          });
-        } catch (err) {
-          console.warn(`Background cache doc ${collectionName}/${docId} failed:`, err);
+    let snap: any = null;
+    if (!isFirebaseDisabled) {
+      try {
+        snap = await getDoc(docRef);
+      } catch (err: any) {
+        if (err?.message?.includes("Quota") || err?.code === "resource-exhausted" || err?.code === "unavailable") {
+          isFirebaseDisabled = true;
         }
-      }, 50);
+      }
     }
-    return snap;
+
+    if (!snap || !snap.exists()) {
+      try {
+        const cacheSnap = await getDocFromCache(docRef);
+        if (cacheSnap && cacheSnap.exists()) {
+          snap = cacheSnap;
+        }
+      } catch (_) {}
+    }
+
+    if (snap && snap.exists()) {
+      if (isSupabaseConfigured && supabase) {
+        setTimeout(async () => {
+          try {
+            const id = `${collectionName}_${docId}`;
+            await supabase.from("app_collections").upsert({
+              id,
+              collection_name: collectionName,
+              doc_id: docId,
+              data: snap.data(),
+              updated_at: new Date().toISOString()
+            });
+          } catch (err) {}
+        }, 50);
+      }
+      return snap;
+    }
   } catch (err: any) {
     if (err?.message?.includes("Quota") || err?.code === "resource-exhausted") {
-      console.error("FIREBASE QUOTA EXCEEDED (Doc Read): Switched to Supabase.");
+      isFirebaseDisabled = true;
     }
-    console.warn(`Firestore getDoc failed for ${collectionName}/${docId}:`, err?.message || err);
-    return { exists: () => false, data: () => null };
   }
+
+  return { exists: () => false, data: () => null };
 }
 
 // Transparent write wrapper: setDoc replacement
@@ -546,20 +637,100 @@ export async function syncAllFirebaseToSupabase(): Promise<{
   try {
     let gradesCount = 0;
     let examsCount = 0;
+    let otherCount = 0;
+    const studentMap = new Map<string, { displayName: string; kelas: string }>();
 
-    // A. Sync Final Grades from Firestore
+    // 1. Sync Students and Classes first to build metadata mapping
+    const metaCollections = ["studentsByNisn", "classes", "assignments", "submissions", "chapters", "announcements", "absensi", "materials"];
+    for (const coll of metaCollections) {
+      try {
+        let snap: any = null;
+        try {
+          snap = await getDocs(collection(db, coll));
+        } catch (networkErr: any) {
+          // If Firestore quota exhausted or network error, fallback to client IndexedDB cache
+          try {
+            snap = await getDocsFromCache(collection(db, coll));
+          } catch (_) {}
+        }
+
+        if (snap && !snap.empty) {
+          const formatted = snap.docs.map((docSnap: any) => {
+            const data = docSnap.data();
+            if (coll === "studentsByNisn") {
+              const nisn = data.nisn || docSnap.id;
+              const displayName = data.displayName || data.studentName || data.name || "";
+              const kelas = data.kelas || "";
+              if (nisn) {
+                studentMap.set(String(nisn).trim(), { displayName, kelas });
+              }
+            }
+            return {
+              id: `${coll}_${docSnap.id}`,
+              collection_name: coll,
+              doc_id: docSnap.id,
+              data,
+              updated_at: new Date().toISOString()
+            };
+          });
+
+          const { error: upsertErr } = await supabase
+            .from("app_collections")
+            .upsert(formatted, { onConflict: "id" });
+          if (!upsertErr) {
+            otherCount += formatted.length;
+          }
+        }
+      } catch (err) {
+        console.warn(`Sync other collection ${coll} error:`, err);
+      }
+    }
+
+    // Also populate studentMap from Supabase app_collections if already stored
+    if (studentMap.size === 0) {
+      try {
+        const { data: supaStudents } = await supabase
+          .from("app_collections")
+          .select("doc_id, data")
+          .eq("collection_name", "studentsByNisn")
+          .limit(2000);
+        if (Array.isArray(supaStudents)) {
+          for (const s of supaStudents) {
+            const nisn = s.data?.nisn || s.doc_id;
+            const displayName = s.data?.displayName || s.data?.studentName || s.data?.name || "";
+            const kelas = s.data?.kelas || "";
+            if (nisn) {
+              studentMap.set(String(nisn).trim(), { displayName, kelas });
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 2. Sync Final Grades from Firestore with student & class enrichment
     try {
-      const gradesSnap = await getDocs(collection(db, "final_grades"));
-      if (!gradesSnap.empty) {
-        const formattedGrades = gradesSnap.docs.map((docSnap) => {
+      let gradesSnap: any = null;
+      try {
+        gradesSnap = await getDocs(collection(db, "final_grades"));
+      } catch (quotaErr: any) {
+        try {
+          gradesSnap = await getDocsFromCache(collection(db, "final_grades"));
+        } catch (_) {}
+      }
+
+      if (gradesSnap && !gradesSnap.empty) {
+        const formattedGrades = gradesSnap.docs.map((docSnap: any) => {
           const d = docSnap.data();
+          const nisnKey = String(d.nisn || "").trim();
+          const studentInfo = studentMap.get(nisnKey);
+
           return {
             id: docSnap.id,
             exam_id: d.assignmentId || d.examId || "",
             assignment_id: d.assignmentId || d.examId || "",
             nisn: d.nisn || "",
-            student_name: d.studentName || "",
-            kelas: d.kelas || "",
+            student_name: d.studentName || studentInfo?.displayName || "",
+            kelas: d.kelas || studentInfo?.kelas || "",
             nilai: d.nilai ?? d.score ?? 0,
             score: d.score ?? d.nilai ?? 0,
             submitted_at: d.submittedAt || new Date().toISOString(),
@@ -579,20 +750,55 @@ export async function syncAllFirebaseToSupabase(): Promise<{
         }
       }
     } catch (quotaErr: any) {
-      if (quotaErr?.message?.includes("Quota") || quotaErr?.code === "resource-exhausted") {
-        return {
-          gradesCount: 0,
-          examsCount: 0,
-          error: "Kuota baca harian Firebase Firestore saat ini sedang mencapai batas maksimum (50.000 limit). Supabase Anda sudah AKTIF dan SIAP dipakai untuk seluruh ujian/nilai baru tanpa batas. Data lama Firebase dapat disinkronkan setelah kuota harian Firebase ter-reset (pukul 07.00 WIB).",
-        };
+      console.warn("Grades sync note:", quotaErr);
+    }
+
+    // Enrich existing Supabase final_grades if missing student_name or kelas
+    if (studentMap.size > 0) {
+      try {
+        const { data: existingGrades } = await supabase
+          .from("final_grades")
+          .select("id, nisn, student_name, kelas")
+          .or("student_name.is.null,student_name.eq.,kelas.is.null,kelas.eq.")
+          .limit(2000);
+
+        if (Array.isArray(existingGrades) && existingGrades.length > 0) {
+          const updates = existingGrades
+            .filter((g) => {
+              const info = studentMap.get(String(g.nisn || "").trim());
+              return info && (!g.student_name || !g.kelas);
+            })
+            .map((g) => {
+              const info = studentMap.get(String(g.nisn || "").trim())!;
+              return {
+                id: g.id,
+                student_name: g.student_name || info.displayName,
+                kelas: g.kelas || info.kelas,
+              };
+            });
+
+          if (updates.length > 0) {
+            await supabase.from("final_grades").upsert(updates, { onConflict: "id" });
+          }
+        }
+      } catch (enrichErr) {
+        console.warn("Enrich existing grades note:", enrichErr);
       }
     }
 
-    // B. Sync Exams
+    // 3. Sync Exams
     try {
-      const examsSnap = await getDocs(collection(db, "exams"));
-      if (!examsSnap.empty) {
-        const formattedExams = examsSnap.docs.map((docSnap) => {
+      let examsSnap: any = null;
+      try {
+        examsSnap = await getDocs(collection(db, "exams"));
+      } catch (quotaErr: any) {
+        try {
+          examsSnap = await getDocsFromCache(collection(db, "exams"));
+        } catch (_) {}
+      }
+
+      if (examsSnap && !examsSnap.empty) {
+        const formattedExams = examsSnap.docs.map((docSnap: any) => {
           const d = docSnap.data();
           return {
             id: docSnap.id,
@@ -615,49 +821,21 @@ export async function syncAllFirebaseToSupabase(): Promise<{
         }
       }
     } catch (quotaErr: any) {
-      console.warn("Exams sync Firestore quota note:", quotaErr);
+      console.warn("Exams sync note:", quotaErr);
     }
 
-    // C. Sync all other collections to app_collections (NoSQL cache)
-    const otherCollections = [
-      "classes",
-      "studentsByNisn",
-      "assignments",
-      "submissions",
-      "chapters",
-      "announcements",
-      "absensi",
-      "materials"
-    ];
-
-    let otherCount = 0;
-    for (const coll of otherCollections) {
-      try {
-        const snap = await getDocs(collection(db, coll));
-        if (!snap.empty) {
-          const formatted = snap.docs.map((docSnap) => ({
-            id: `${coll}_${docSnap.id}`,
-            collection_name: coll,
-            doc_id: docSnap.id,
-            data: docSnap.data(),
-            updated_at: new Date().toISOString()
-          }));
-          const { error: upsertErr } = await supabase
-            .from("app_collections")
-            .upsert(formatted, { onConflict: "id" });
-          if (!upsertErr) {
-            otherCount += formatted.length;
-          }
-        }
-      } catch (err) {
-        console.warn(`Sync other collection ${coll} error:`, err);
-      }
-    }
-
-    // D. Sync Rubric
+    // 4. Sync Rubric
     try {
-      const rubricSnap = await getDoc(doc(db, "config", "grading_rubric"));
-      if (rubricSnap.exists()) {
+      let rubricSnap: any = null;
+      try {
+        rubricSnap = await getDoc(doc(db, "config", "grading_rubric"));
+      } catch (_) {
+        try {
+          rubricSnap = await getDocFromCache(doc(db, "config", "grading_rubric"));
+        } catch (_) {}
+      }
+
+      if (rubricSnap && rubricSnap.exists && rubricSnap.exists()) {
         await supabase.from("app_collections").upsert({
           id: "config_grading_rubric",
           collection_name: "config",
@@ -669,6 +847,9 @@ export async function syncAllFirebaseToSupabase(): Promise<{
     } catch (err) {
       console.warn("Sync grading rubric error:", err);
     }
+
+    // 5. Invalidate client caches so UI immediately renders fresh data from Supabase
+    clearTeacherCaches();
 
     return { gradesCount, examsCount, otherCount };
   } catch (err: any) {

@@ -13,14 +13,22 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigLocal.messagingSenderId,
   appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigLocal.appId,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || firebaseConfigLocal.measurementId,
+  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || (firebaseConfigLocal as any).firestoreDatabaseId,
 };
 
 const app = initializeApp(firebaseConfig);
 
-export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-}, (firebaseConfig as any).firestoreDatabaseId || (firebaseConfigLocal as any).firestoreDatabaseId);
+const databaseId = firebaseConfig.firestoreDatabaseId || (firebaseConfigLocal as any).firestoreDatabaseId;
+
+export const db = databaseId 
+  ? initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    }, databaseId)
+  : initializeFirestore(app, {
+      experimentalAutoDetectLongPolling: true,
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    });
 
 export const auth = getAuth(app);
 export const storage = getStorage(app, (firebaseConfig as any).storageBucket);
