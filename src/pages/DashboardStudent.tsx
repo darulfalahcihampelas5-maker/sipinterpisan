@@ -745,7 +745,10 @@ export default function DashboardStudent() {
       setStudent(cached);
       return;
     }
-    const studentDoc = doc(db, "studentsByNisn", studentData.id);
+    const targetNisn = studentData.nisn || (studentData.id && !studentData.id.startsWith("IF") ? studentData.id : null);
+    if (!targetNisn) return;
+
+    const studentDoc = doc(db, "studentsByNisn", targetNisn);
     getDoc(studentDoc).then((snapshot) => {
       if (snapshot.exists()) {
         const fullData = { id: snapshot.id, ...snapshot.data() };
@@ -753,11 +756,12 @@ export default function DashboardStudent() {
         setLocalCache(cacheKey, fullData);
       }
     }).catch((error) => { console.warn('Firestore error:', error.message); dispatchIfQuotaError(error); });
-  }, [studentData?.id]);
+  }, [studentData?.id, studentData?.nisn]);
 
   // Track online/offline status efficiently (once per session to avoid write quota burn)
   useEffect(() => {
-    if (!studentData?.id) return;
+    const targetNisn = studentData?.nisn || (studentData?.id && !studentData?.id.startsWith("IF") ? studentData?.id : null);
+    if (!targetNisn) return;
 
     const lastPresence = Number(sessionStorage.getItem("firas_presence_time") || 0);
     // Only update presence once every 60 minutes per session
@@ -766,7 +770,7 @@ export default function DashboardStudent() {
     const updatePresence = async () => {
       try {
         await setDoc(
-          doc(db, "studentsByNisn", studentData.id),
+          doc(db, "studentsByNisn", targetNisn),
           { lastActive: new Date().toISOString() },
           { merge: true }
         );
@@ -831,10 +835,11 @@ export default function DashboardStudent() {
   };
 
   const handleLogout = async () => {
-    if (studentData?.id) {
+    const targetNisn = studentData?.nisn || (studentData?.id && !studentData?.id.startsWith("IF") ? studentData?.id : null);
+    if (targetNisn) {
       // Fire and forget Firestore update so slow or offline connections do not block the logout flow
       setDoc(
-        doc(db, "studentsByNisn", studentData.id),
+        doc(db, "studentsByNisn", targetNisn),
         { lastActive: null },
         { merge: true }
       ).catch((e) => {

@@ -290,7 +290,8 @@ export default function LoginPage() {
                     storedNisn === rawCode ||
                     storedNis === rawCode
                   ) {
-                    return { id: item.doc_id, ...studentData };
+                    const resolvedNisn = studentData.nisn || item.doc_id;
+                    return { id: resolvedNisn, ...studentData, nisn: resolvedNisn };
                   }
                 }
               }
@@ -375,6 +376,7 @@ export default function LoginPage() {
           classId: "XI-MIPA-1",
           accessCode: studentAccessCode.toString().trim(),
           role: "student",
+          isGuest: true,
         };
         setStudent(dynamicStudent);
         safeSaveStudentToLocalStorage(dynamicStudent);
@@ -389,6 +391,7 @@ export default function LoginPage() {
         classId: "XI-MIPA-1",
         accessCode: studentAccessCode.toString().trim(),
         role: "student",
+        isGuest: true,
       };
       setStudent(dynamicStudent);
       safeSaveStudentToLocalStorage(dynamicStudent);

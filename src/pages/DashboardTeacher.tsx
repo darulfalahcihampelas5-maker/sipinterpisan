@@ -912,7 +912,7 @@ export default function DashboardTeacher() {
 
   const [studentsList, setStudentsList] = useState<any[]>([]);
   const filteredStudents = useMemo(() => {
-    let list = studentsList;
+    let list = studentsList.filter((student) => student && (student.displayName || student.studentName) && student.kelas);
     if (studentClassFilter && studentClassFilter !== "SEMUA_KELAS") {
       list = list.filter((student) => student.kelas === studentClassFilter);
     }
@@ -1411,14 +1411,21 @@ export default function DashboardTeacher() {
       }
 
       // 2. Students (rarely changes, always cache first unless missing or forceRefresh)
-      const cachedStudents = !forceRefresh && getLocalCache<any[]>("firas_cache_students", 12 * 60 * 60 * 1000);
+      const rawCachedStudents = !forceRefresh && getLocalCache<any[]>("firas_cache_students", 12 * 60 * 60 * 1000);
+      const cachedStudents = Array.isArray(rawCachedStudents)
+        ? rawCachedStudents.filter((s: any) => s && (s.displayName || s.studentName) && s.kelas)
+        : null;
+
       if (cachedStudents && cachedStudents.length > 0) {
         setStudentsList(cachedStudents);
       } else {
         try {
           const snapshot = await getDocs(collection(db, "studentsByNisn"));
           trackUsage(snapshot.size, 0);
-          const studs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const studs = snapshot.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .filter((s: any) => s && (s.displayName || s.studentName) && s.kelas);
+
           if (studs.length > 0) {
             studs.sort((a: any, b: any) => {
               const classA = (a.kelas || "").toString();
@@ -1434,14 +1441,20 @@ export default function DashboardTeacher() {
             setStudentsList(studs);
             setLocalCache("firas_cache_students", studs);
           } else {
-            const fallbackCached = getLocalCache<any[]>("firas_cache_students", Infinity);
+            const rawFallback = getLocalCache<any[]>("firas_cache_students", Infinity);
+            const fallbackCached = Array.isArray(rawFallback)
+              ? rawFallback.filter((s: any) => s && (s.displayName || s.studentName) && s.kelas)
+              : null;
             if (fallbackCached && fallbackCached.length > 0) {
               setStudentsList(fallbackCached);
             }
           }
         } catch (e) {
           console.warn("Failed fetching students:", e);
-          const fallbackCached = getLocalCache<any[]>("firas_cache_students", Infinity);
+          const rawFallback = getLocalCache<any[]>("firas_cache_students", Infinity);
+          const fallbackCached = Array.isArray(rawFallback)
+            ? rawFallback.filter((s: any) => s && (s.displayName || s.studentName) && s.kelas)
+            : null;
           if (fallbackCached && fallbackCached.length > 0) {
             setStudentsList(fallbackCached);
           }

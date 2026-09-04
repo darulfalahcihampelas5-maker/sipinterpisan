@@ -598,11 +598,52 @@ export async function dbSetDoc(docRef: any, data: any, options?: any): Promise<v
         });
       } else {
         const id = `${collectionName}_${docId}`;
+        let dataToSave = data;
+
+        // If merge option is specified, merge with existing data in Supabase
+        if (options && (options.merge === true || options.mergeFields)) {
+          try {
+            const { data: existingRow } = await supabase
+              .from("app_collections")
+              .select("data")
+              .eq("id", id)
+              .maybeSingle();
+
+            if (existingRow && existingRow.data && typeof existingRow.data === "object") {
+              dataToSave = { ...existingRow.data, ...data };
+            }
+          } catch (mErr) {
+            console.warn("Supabase merge fetch warning:", mErr);
+          }
+        }
+
+        // Safety check for studentsByNisn: do not create phantom/empty records
+        if (collectionName === "studentsByNisn") {
+          const hasName = Boolean(dataToSave?.displayName || dataToSave?.studentName || dataToSave?.name);
+          const hasClass = Boolean(dataToSave?.kelas);
+          if (!hasName || !hasClass) {
+            // Check if there is an existing student record to merge into
+            const { data: existingStudent } = await supabase
+              .from("app_collections")
+              .select("data")
+              .eq("id", id)
+              .maybeSingle();
+
+            if (existingStudent?.data?.displayName) {
+              dataToSave = { ...existingStudent.data, ...dataToSave };
+            } else {
+              // Do not write an empty student without name and class to studentsByNisn
+              console.warn(`Prevented creating empty student record in studentsByNisn/${docId}`);
+              return;
+            }
+          }
+        }
+
         await supabase.from("app_collections").upsert({
           id,
           collection_name: collectionName,
           doc_id: docId,
-          data,
+          data: dataToSave,
           updated_at: new Date().toISOString()
         });
       }
@@ -655,13 +696,21 @@ export async function syncAllFirebaseToSupabase(): Promise<{
         }
 
         if (snap && !snap.empty) {
-          const formatted = snap.docs.map((docSnap: any) => {
+          const formatted = snap.docs
+            .filter((docSnap: any) => {
+              if (coll === "studentsByNisn") {
+                const d = docSnap.data();
+                return Boolean(d?.displayName || d?.studentName || d?.name);
+              }
+              return true;
+            })
+            .map((docSnap: any) => {
             const data = docSnap.data();
             if (coll === "studentsByNisn") {
               const nisn = data.nisn || docSnap.id;
               const displayName = data.displayName || data.studentName || data.name || "";
               const kelas = data.kelas || "";
-              if (nisn) {
+              if (nisn && displayName) {
                 studentMap.set(String(nisn).trim(), { displayName, kelas });
               }
             }
