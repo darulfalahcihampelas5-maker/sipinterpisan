@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Trash2, X, Search, FileText, MonitorPlay, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Trash2, X, Search, FileText, MonitorPlay, AlertTriangle, CheckCircle2, Pencil } from "lucide-react";
 
 export interface RekapColumnItem {
   id: string;
@@ -17,6 +17,7 @@ interface DeleteColumnModalProps {
   onClose: () => void;
   columns: RekapColumnItem[];
   onDeleteColumn: (id: string, title: string, type: "assignment" | "exam") => Promise<void> | void;
+  onEditColumn?: (col: RekapColumnItem) => void;
 }
 
 export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
@@ -24,6 +25,7 @@ export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
   onClose,
   columns,
   onDeleteColumn,
+  onEditColumn,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "assignment" | "exam">("ALL");
@@ -200,19 +202,36 @@ export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(col)}
-                    disabled={isDeleting}
-                    className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 text-xs font-bold flex items-center gap-1.5 transition-all shrink-0 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
-                  >
-                    {isDeleting ? (
-                      <div className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Trash2 className="w-3.5 h-3.5" />
+                  <div className="flex items-center gap-2 shrink-0">
+                    {onEditColumn && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onEditColumn(col);
+                        }}
+                        disabled={isDeleting}
+                        className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-600 text-amber-700 hover:text-white border border-amber-200 hover:border-amber-600 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                        title="Edit Identitas Kolom"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Edit</span>
+                      </button>
                     )}
-                    <span>Hapus</span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(col)}
+                      disabled={isDeleting}
+                      className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                    >
+                      {isDeleting ? (
+                        <div className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                      <span>Hapus</span>
+                    </button>
+                  </div>
                 </div>
               );
             })

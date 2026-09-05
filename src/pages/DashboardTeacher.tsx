@@ -31,6 +31,7 @@ import {
   FileText,
   School,
   Edit,
+  Pencil,
   Trash2,
   LayoutDashboard,
   AlertCircle,
@@ -104,6 +105,7 @@ import { ShareCbtExamModal } from "../components/teacher/ShareCbtExamModal";
 import { SupabaseSyncModal } from "../components/teacher/SupabaseSyncModal";
 import { AddManualColumnModal } from "../components/teacher/AddManualColumnModal";
 import { DeleteColumnModal } from "../components/teacher/DeleteColumnModal";
+import { EditColumnModal, ColumnEditData } from "../components/teacher/EditColumnModal";
 import { getFinalGrades, saveFinalGrade, subscribeToFinalGrades } from "../lib/supabaseSync";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
@@ -755,6 +757,9 @@ export default function DashboardTeacher() {
 
   const [isAddManualColumnOpen, setIsAddManualColumnOpen] = useState(false);
   const [isDeleteColumnModalOpen, setIsDeleteColumnModalOpen] = useState(false);
+  const [isEditColumnModalOpen, setIsEditColumnModalOpen] = useState(false);
+  const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
+  const [isSavingEditColumn, setIsSavingEditColumn] = useState(false);
   const [manualBab, setManualBab] = useState("");
   const [manualMateri, setManualMateri] = useState("");
   const [manualKelas, setManualKelas] = useState("");
@@ -2095,6 +2100,163 @@ export default function DashboardTeacher() {
         }
       }
     );
+  };
+
+  const handleOpenEditColumnModal = (col?: any) => {
+    if (col && col.id) {
+      setEditingColumnId(col.id);
+    } else {
+      const firstCol = assignmentsList[0]?.id || examsList[0]?.id || null;
+      setEditingColumnId(firstCol);
+    }
+    setIsEditColumnModalOpen(true);
+  };
+
+  const handleSaveEditedColumn = async (editData: ColumnEditData) => {
+    setIsSavingEditColumn(true);
+    try {
+      const { id, type, originalType, title, bab, selectedClasses, startDate, deadline, description } = editData;
+      const pubDate = startDate ? new Date(startDate).toISOString() : new Date().toISOString();
+      const deadlineIso = deadline ? new Date(deadline).toISOString() : undefined;
+      const kelasRefStr = selectedClasses.length === classesList.length ? "SEMUA_KELAS" : selectedClasses.join(", ");
+
+      const typeChanged = type !== originalType;
+
+      if (!typeChanged) {
+        if (type === "CBT") {
+          const existingExam = examsList.find((e) => e.id === id) || {};
+          const updatedExam = {
+            ...existingExam,
+            id,
+            title: title.trim(),
+            materi: title.trim(),
+            bab,
+            targetClasses: selectedClasses,
+            kelasRef: kelasRefStr,
+            targets: selectedClasses.map((k) => ({ kelas: k, startDate: pubDate })),
+            startDate: pubDate,
+            publishedAt: pubDate,
+            description: description !== undefined ? description : existingExam.description,
+            updatedAt: new Date().toISOString(),
+            type: "CBT",
+          };
+          await setDoc(doc(db, "exams", id), updatedExam);
+          const newExamsList = examsList.map((e) => (e.id === id ? updatedExam : e));
+          setExamsList(newExamsList);
+          setLocalCache("firas_cache_exams", newExamsList);
+        } else {
+          const existingAssign = assignmentsList.find((a) => a.id === id) || {};
+          const updatedAssign = {
+            ...existingAssign,
+            id,
+            title: title.trim(),
+            materi: title.trim(),
+            bab,
+            targetClasses: selectedClasses,
+            kelasRef: kelasRefStr,
+            kelas: kelasRefStr,
+            targets: selectedClasses.map((k) => ({
+              kelas: k,
+              startDate: pubDate,
+              publishedAt: pubDate,
+              deadline: deadlineIso || existingAssign.deadline || new Date(new Date(pubDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+            })),
+            startDate: pubDate,
+            publishedAt: pubDate,
+            deadline: deadlineIso || existingAssign.deadline || new Date(new Date(pubDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+            description: description !== undefined ? description : existingAssign.description,
+            updatedAt: new Date().toISOString(),
+            type: "Tugas",
+          };
+          await setDoc(doc(db, "assignments", id), updatedAssign);
+          const newAssignList = assignmentsList.map((a) => (a.id === id ? updatedAssign : a));
+          setAssignmentsList(newAssignList);
+          setLocalCache("firas_cache_assignments", newAssignList);
+        }
+      } else {
+        // Changed type between Tugas and CBT
+        if (type === "CBT" && originalType === "Tugas") {
+          const existingAssign = assignmentsList.find((a) => a.id === id) || {};
+          const newExamDoc = {
+            ...existingAssign,
+            id,
+            title: title.trim(),
+            materi: title.trim(),
+            subject: existingAssign.subject || "Informatika",
+            bab,
+            targetClasses: selectedClasses,
+            kelasRef: kelasRefStr,
+            targets: selectedClasses.map((k) => ({ kelas: k, startDate: pubDate })),
+            startDate: pubDate,
+            publishedAt: pubDate,
+            createdAt: existingAssign.createdAt || pubDate,
+            updatedAt: new Date().toISOString(),
+            duration: existingAssign.duration || 60 * 60,
+            kkm: existingAssign.kkm || 75,
+            category: "CBT / Evaluasi",
+            description: description !== undefined ? description : (existingAssign.description || ""),
+            type: "CBT",
+            questions: existingAssign.questions || [],
+            teacherId: user?.uid || "mock-admin",
+          };
+
+          await setDoc(doc(db, "exams", id), newExamDoc);
+          await deleteDoc(doc(db, "assignments", id));
+
+          const newAssignList = assignmentsList.filter((a) => a.id !== id);
+          const newExamsList = [newExamDoc, ...examsList.filter((e) => e.id !== id)];
+          setAssignmentsList(newAssignList);
+          setExamsList(newExamsList);
+          setLocalCache("firas_cache_assignments", newAssignList);
+          setLocalCache("firas_cache_exams", newExamsList);
+        } else if (type === "Tugas" && originalType === "CBT") {
+          const existingExam = examsList.find((e) => e.id === id) || {};
+          const newAssignDoc = {
+            ...existingExam,
+            id,
+            title: title.trim(),
+            materi: title.trim(),
+            bab,
+            targetClasses: selectedClasses,
+            kelasRef: kelasRefStr,
+            kelas: kelasRefStr,
+            targets: selectedClasses.map((k) => ({
+              kelas: k,
+              startDate: pubDate,
+              publishedAt: pubDate,
+              deadline: deadlineIso || new Date(new Date(pubDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+            })),
+            startDate: pubDate,
+            publishedAt: pubDate,
+            deadline: deadlineIso || new Date(new Date(pubDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+            createdAt: existingExam.createdAt || pubDate,
+            updatedAt: new Date().toISOString(),
+            description: description !== undefined ? description : (existingExam.description || ""),
+            type: "Tugas",
+            teacherId: user?.uid || "mock-admin",
+          };
+
+          await setDoc(doc(db, "assignments", id), newAssignDoc);
+          await deleteDoc(doc(db, "exams", id));
+
+          const newExamsList = examsList.filter((e) => e.id !== id);
+          const newAssignList = [newAssignDoc, ...assignmentsList.filter((a) => a.id !== id)];
+          setExamsList(newExamsList);
+          setAssignmentsList(newAssignList);
+          setLocalCache("firas_cache_exams", newExamsList);
+          setLocalCache("firas_cache_assignments", newAssignList);
+        }
+      }
+
+      setIsEditColumnModalOpen(false);
+      showAlert("Berhasil", `Identitas kolom '${title.trim()}' berhasil diperbarui!`, "alert");
+    } catch (err: any) {
+      console.warn("Gagal memperbarui kolom:", err);
+      showAlert("Gagal", `Gagal memperbarui identitas kolom: ${err?.message || err}`, "danger");
+      throw err;
+    } finally {
+      setIsSavingEditColumn(false);
+    }
   };
 
   const handleDeleteStudent = async (id: string, nisn?: string) => {
@@ -7646,6 +7808,14 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                    <Plus className="w-4 h-4"/>
                                    Tambah Kolom Nilai
                                  </button>
+                                 <button
+                                   onClick={() => handleOpenEditColumnModal()}
+                                   className="px-4 py-2.5 bg-amber-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-amber-700 transition-all flex items-center gap-2 active:scale-95 shadow-md shadow-amber-600/20 cursor-pointer"
+                                   title="Edit Identitas Kolom Penilaian (Judul, Jenis, Tanggal, Bab, Kelas)"
+                                 >
+                                   <Pencil className="w-4 h-4"/>
+                                   Edit Kolom
+                                 </button>
                                   <button
                                     onClick={() => setIsDeleteColumnModalOpen(true)}
                                     className="px-4 py-2.5 bg-rose-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 active:scale-95 shadow-md shadow-rose-600/20 cursor-pointer"
@@ -7799,17 +7969,30 @@ const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a
                                                 {col.type === "exam" ? "CBT" : "Tugas"}
                                               </span>
 
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  handlePromptDeleteRekapColumn(col.id, col.title, col.type);
-                                                }}
-                                                className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
-                                                title={`Hapus kolom ${col.type === "exam" ? "CBT" : "Tugas"}: "${col.title}"`}
-                                              >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
+                                              <div className="flex items-center gap-1">
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleOpenEditColumnModal(col);
+                                                  }}
+                                                  className="p-1 rounded-md text-slate-400 hover:text-amber-600 hover:bg-amber-100 transition-colors cursor-pointer"
+                                                  title={`Edit identitas kolom ${col.type === "exam" ? "CBT" : "Tugas"}: "${col.title}"`}
+                                                >
+                                                  <Pencil className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handlePromptDeleteRekapColumn(col.id, col.title, col.type);
+                                                  }}
+                                                  className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
+                                                  title={`Hapus kolom ${col.type === "exam" ? "CBT" : "Tugas"}: "${col.title}"`}
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                </button>
+                                              </div>
                                             </div>
 
                                             {(() => {
@@ -9973,6 +10156,64 @@ const targetCls = selectedClassFilter || stu.kelas;
           return dateB - dateA;
         })}
         onDeleteColumn={handlePromptDeleteRekapColumn}
+        onEditColumn={handleOpenEditColumnModal}
+      />
+
+      {/* Edit Rekap Column Modal */}
+      <EditColumnModal
+        isOpen={isEditColumnModalOpen}
+        onClose={() => setIsEditColumnModalOpen(false)}
+        columns={[
+          ...assignmentsList.map((a) => ({
+            id: a.id,
+            title: a.materi || a.title || "Tugas",
+            type: "assignment" as const,
+            bab: a.bab,
+            date: a.startDate || a.publishedAt || a.createdAt,
+            startDate: a.startDate || a.publishedAt || a.createdAt,
+            deadline: a.deadline,
+            targetClasses: a.targetClasses,
+            kelasRef: a.kelasRef || a.kelas,
+            description: a.description,
+            rawDoc: a,
+          })),
+          ...examsList.map((e) => ({
+            id: e.id,
+            title: e.title || e.materi || "CBT",
+            type: "exam" as const,
+            bab: e.bab,
+            date: e.startDate || e.publishedAt || e.createdAt,
+            startDate: e.startDate || e.publishedAt || e.createdAt,
+            deadline: null,
+            targetClasses: e.targetClasses,
+            kelasRef: e.kelasRef,
+            description: e.description,
+            rawDoc: e,
+          })),
+        ].sort((a, b) => {
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          return dateB - dateA;
+        })}
+        initialSelectedId={editingColumnId}
+        chaptersList={
+          chaptersList.length > 0
+            ? chaptersList
+            : [
+                { id: "Informatika dan Keterampilan Generik", name: "Informatika dan Keterampilan Generik" },
+                { id: "Berpikir Komputasional", name: "Berpikir Komputasional" },
+                { id: "Teknologi Informasi dan Komunikasi", name: "Teknologi Informasi dan Komunikasi" },
+                { id: "Sistem Komputer", name: "Sistem Komputer" },
+                { id: "Jaringan Komputer dan Internet", name: "Jaringan Komputer dan Internet" },
+                { id: "Analisis Data", name: "Analisis Data" },
+                { id: "Algoritma dan Pemrograman", name: "Algoritma dan Pemrograman" },
+                { id: "Dampak Sosial Informatika", name: "Dampak Sosial Informatika" },
+                { id: "Praktik Lintas Bidang", name: "Praktik Lintas Bidang" },
+              ]
+        }
+        classesList={classesList}
+        onSave={handleSaveEditedColumn}
+        isSaving={isSavingEditColumn}
       />
 
       {/* Supabase Database Sync Modal */}
