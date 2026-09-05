@@ -312,6 +312,7 @@ import {
   Layers,
 } from "lucide-react";
 
+import { ComputationalThinkingSimulation } from "../components/simulation/ComputationalThinkingSimulation";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationModal } from "../components/NotificationModal";
 import { AttendanceDonutChart } from "../components/AttendanceDonutChart";
@@ -663,6 +664,21 @@ export default function DashboardStudent() {
   }, []);
 
   const studentData = student;
+  useEffect(() => {
+    if (!student?.kelas) return;
+    import("firebase/firestore").then(({ doc, onSnapshot }) => {
+      const docRef = doc(db, "config", "simulasiBK");
+      const unsubscribe = onSnapshot(docRef, (snap) => {
+        if (snap.exists()) {
+          const activeClasses = snap.data().activeClasses || [];
+          setIsSimulasiEnabled(activeClasses.includes(student.kelas));
+        } else {
+          setIsSimulasiEnabled(false);
+        }
+      });
+    });
+  }, [student?.kelas]);
+
 
   const getSavedExamSession = () => {
     if (!student?.nisn) return null;
@@ -683,6 +699,13 @@ export default function DashboardStudent() {
   const savedExamSession = useMemo(() => getSavedExamSession(), [student?.nisn]);
 
   const [activeMenu, setActiveMenu] = useState("dashboard");
+  const [isSimulasiEnabled, setIsSimulasiEnabled] = useState(false);
+  useEffect(() => {
+    if (!isSimulasiEnabled && activeMenu === "simulasi") {
+      setActiveMenu("dashboard");
+    }
+  }, [isSimulasiEnabled, activeMenu]);
+
   const [selectedSubject, setSelectedSubject] = useState("Informatika");
   const [taskFilter, setTaskFilter] = useState<"semua" | "tertunda" | "selesai" | "terlambat">("semua");
   const [searchQuery, setSearchQuery] = useState("");
@@ -727,6 +750,22 @@ export default function DashboardStudent() {
       return () => clearTimeout(hideTimer);
     }
   }, [showPhotoWarning]);
+
+  useEffect(() => {
+    if (!student?.kelas) return;
+    import("firebase/firestore").then(({ doc, onSnapshot }) => {
+      const docRef = doc(db, "config", "simulasiBK");
+      const unsubscribe = onSnapshot(docRef, (snap) => {
+        if (snap.exists()) {
+          const activeClasses = snap.data().activeClasses || [];
+          setIsSimulasiEnabled(activeClasses.includes(student.kelas));
+        } else {
+          setIsSimulasiEnabled(false);
+        }
+      });
+      return () => unsubscribe();
+    });
+  }, [student?.kelas]);
 
   // Sync student data if it changes in firestore (like profile image)
   useEffect(() => {
@@ -3600,14 +3639,17 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
     );
   }
 
-  const menus = [
+  const allMenus = [
     { id: "dashboard", label: "Beranda", icon: Home },
+    { id: "simulasi", label: "Simulasi BK", icon: Gamepad2 },
     { id: "daftar-tugas", label: "Tugas Siswa", icon: FileText },
     { id: "nilai-siswa", label: "Nilai Siswa", icon: BarChart3 },
     { id: "kehadiran", label: "Kehadiran Siswa", icon: Clock },
     { id: "materi", label: "Materi Ajar", icon: BookOpen },
     { id: "ujian-online", label: "Ujian Online", icon: FileEdit },
   ];
+
+  const menus = allMenus.filter(m => m.id !== "simulasi" || isSimulasiEnabled);
 
   const variants = {
     enter: (direction: number) => ({
@@ -6827,6 +6869,21 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Simulasi Berpikir Komputasional Menu */}
+              {activeMenu === "simulasi" && (
+                <div className="space-y-6 max-w-[1400px] mx-auto px-1 sm:px-4 pb-12 animate-in fade-in duration-300">
+                  <ComputationalThinkingSimulation
+                    userRole="student"
+                    currentUser={{
+                      name: student?.nama,
+                      nisn: student?.nisn,
+                      kelas: student?.kelas,
+                    }}
+                    onBackToDashboard={() => setActiveMenu("dashboard")}
+                  />
                 </div>
               )}
               

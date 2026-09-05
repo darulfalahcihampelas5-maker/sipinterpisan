@@ -1,3 +1,4 @@
+import { SimulasiBKSettings } from "../components/teacher/SimulasiBKSettings";
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../AuthContext";
@@ -87,7 +88,9 @@ import {
   Upload,
   Eye,
   EyeOff,
+  Gamepad2,
 } from "lucide-react";
+import { ComputationalThinkingSimulation } from "../components/simulation/ComputationalThinkingSimulation";
 import { useNavigate } from "react-router-dom";
 import { ResetDashboardModal } from "../components/ResetDashboardModal";
 import { StorageManagerModal } from "../components/StorageManagerModal";
@@ -2909,6 +2912,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
 
   const menus = [
     { id: "dashboard", label: "Dasbor Utama", icon: LayoutDashboard },
+    { id: "simulasi", label: "Simulasi BK", icon: Gamepad2 },
     { id: "menu-pengguna", label: "Menu Pengguna", icon: User },
     { id: "manajemen-nilai", label: "Manajemen Nilai", icon: ClipboardCheck },
     { id: "manajemen-siswa-dan-kelas", label: "Manajemen Siswa dan Kelas", icon: Users },
@@ -9927,6 +9931,21 @@ const targetCls = selectedClassFilter || stu.kelas;
                           </button>
                         </form>
                       </div>
+                    </div>
+                  )}
+
+                  {/* Simulasi Berpikir Komputasional Menu */}
+                  {activeMenu === "simulasi" && (
+                    <div className="space-y-6 animate-in fade-in duration-300">
+                      <SimulasiBKSettings classesList={classesList} />
+                      <ComputationalThinkingSimulation
+                        userRole="teacher"
+                        currentUser={{
+                          name: "Guru Pengampu Informatika",
+                          kelas: selectedClassFilter || "Kelas X",
+                        }}
+                        onBackToDashboard={() => setActiveMenu("dashboard")}
+                      />
                     </div>
                   )}
 
