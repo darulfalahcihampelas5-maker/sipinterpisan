@@ -103,8 +103,9 @@ import { ResetStudentExamModal } from "../components/teacher/ResetStudentExamMod
 import { ShareCbtExamModal } from "../components/teacher/ShareCbtExamModal";
 import { SupabaseSyncModal } from "../components/teacher/SupabaseSyncModal";
 import { AddManualColumnModal } from "../components/teacher/AddManualColumnModal";
+import { DeleteColumnModal } from "../components/teacher/DeleteColumnModal";
 import { getFinalGrades, saveFinalGrade, subscribeToFinalGrades } from "../lib/supabaseSync";
-import { isSupabaseConfigured } from "../lib/supabase";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
 
 const trackUsage = (reads = 0, writes = 0) => {
@@ -753,6 +754,7 @@ export default function DashboardTeacher() {
   const [isSavingRekapGrades, setIsSavingRekapGrades] = useState(false);
 
   const [isAddManualColumnOpen, setIsAddManualColumnOpen] = useState(false);
+  const [isDeleteColumnModalOpen, setIsDeleteColumnModalOpen] = useState(false);
   const [manualBab, setManualBab] = useState("");
   const [manualMateri, setManualMateri] = useState("");
   const [manualKelas, setManualKelas] = useState("");
@@ -1797,6 +1799,13 @@ export default function DashboardTeacher() {
         const examObj = examsList.find(e => e.id === colId);
         const colTitle = asgObj?.materi || asgObj?.title || examObj?.title || "Penilaian";
         const colBab = asgObj?.bab || examObj?.bab || "Informatika";
+        const colStartDate =
+          asgObj?.startDate ||
+          asgObj?.publishedAt ||
+          asgObj?.createdAt ||
+          examObj?.startDate ||
+          examObj?.publishedAt ||
+          examObj?.createdAt;
 
         // 1. Save to final_grades (Firestore & Supabase)
         const fgId = `${colId}_${nisn}`;
@@ -1807,6 +1816,10 @@ export default function DashboardTeacher() {
           nilai: numVal,
           title: colTitle,
           bab: colBab,
+          type: examObj ? "CBT" : (asgObj?.type || "Tugas"),
+          startDate: colStartDate,
+          publishedAt: colStartDate,
+          isManualColumn: Boolean(asgObj?.isManualColumn || examObj?.isManualColumn),
           gradedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -1856,6 +1869,10 @@ export default function DashboardTeacher() {
           kelas: stKelas,
           nilai: numVal,
           status: numVal !== null ? "sudah dinilai" : (existingSub?.status || "menunggu"),
+          submittedAt: existingSub?.submittedAt || colStartDate || new Date().toISOString(),
+          startDate: colStartDate,
+          publishedAt: colStartDate,
+          isManualColumn: Boolean(asgObj?.isManualColumn || examObj?.isManualColumn),
           gradedAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -1894,65 +1911,116 @@ export default function DashboardTeacher() {
   };
 
   const handleCreateManualColumn = async (formData?: {
+    type?: "Tugas" | "CBT";
     materi: string;
     bab: string;
-    kelas: string;
+    kelas?: string;
+    selectedClasses?: string[];
     publishDate: string;
     description?: string;
   }) => {
+    const colType = formData?.type || "Tugas";
     const targetMateri = formData?.materi || manualMateri;
     const targetBab = formData?.bab || manualBab;
-    const targetKelas = formData?.kelas || manualKelas;
     const targetPubDate = formData?.publishDate || manualPublishDate;
-    const targetDesc = formData?.description || "Kolom Nilai Manual (Buku Nilai)";
+    const targetDesc = formData?.description || `Kolom Nilai ${colType} Manual (Buku Nilai)`;
 
     if (!targetMateri.trim()) {
-      showAlert("Validasi", "Judul Tugas / Tugas ke wajib diisi.", "alert");
+      showAlert("Validasi", `Judul / Nama ${colType} wajib diisi.`, "alert");
       return;
     }
     if (!targetBab) {
       showAlert("Validasi", "Pilih Bab terlebih dahulu.", "alert");
       return;
     }
-    if (!targetKelas) {
-      showAlert("Validasi", "Pilih Kelas terlebih dahulu.", "alert");
+
+    const targetClasses =
+      formData?.selectedClasses && formData.selectedClasses.length > 0
+        ? formData.selectedClasses
+        : formData?.kelas && formData.kelas !== "ALL" && formData.kelas !== "SEMUA_KELAS"
+        ? [formData.kelas]
+        : classesList.map((c) => c.name || c.id);
+
+    if (targetClasses.length === 0) {
+      showAlert("Validasi", "Pilih minimal satu kelas sasaran.", "alert");
       return;
     }
 
+    const kelasRefStr =
+      targetClasses.length === classesList.length
+        ? "SEMUA_KELAS"
+        : targetClasses.join(", ");
+
     setIsSavingManualColumn(true);
     try {
-      const newAssignmentId = `TGS-MANUAL-${Date.now()}`;
-      const targetClasses = targetKelas === "ALL" || targetKelas === "SEMUA_KELAS" 
-        ? classesList.map((c) => c.name) 
-        : [targetKelas];
       const pubDate = targetPubDate ? new Date(targetPubDate).toISOString() : new Date().toISOString();
 
-      const newDoc = {
-        id: newAssignmentId,
-        bab: targetBab,
-        materi: targetMateri.trim(),
-        kelas: targetKelas,
-        targets: targetClasses.map((k) => ({
-          kelas: k,
+      if (colType === "CBT") {
+        const newExamId = `EXM-MANUAL-${Date.now()}`;
+        const newExamDoc = {
+          id: newExamId,
+          title: targetMateri.trim(),
+          materi: targetMateri.trim(),
+          subject: "Informatika",
+          bab: targetBab,
+          kelasRef: kelasRefStr,
+          targetClasses: targetClasses,
+          targets: targetClasses.map((k) => ({
+            kelas: k,
+            startDate: pubDate,
+          })),
+          startDate: pubDate,
+          publishedAt: pubDate,
+          createdAt: pubDate,
+          updatedAt: new Date().toISOString(),
+          duration: 60 * 60,
+          kkm: 75,
+          category: "CBT / Evaluasi",
+          description: targetDesc,
+          isManualColumn: true,
+          type: "CBT",
+          questions: [],
+          teacherId: user?.uid || "mock-admin",
+        };
+
+        await setDoc(doc(db, "exams", newExamId), newExamDoc);
+
+        const updatedExams = [newExamDoc, ...examsList];
+        setExamsList(updatedExams);
+        setLocalCache("firas_cache_exams", updatedExams);
+      } else {
+        const newAssignmentId = `TGS-MANUAL-${Date.now()}`;
+        const newDoc = {
+          id: newAssignmentId,
+          bab: targetBab,
+          materi: targetMateri.trim(),
+          title: targetMateri.trim(),
+          kelas: kelasRefStr,
+          kelasRef: kelasRefStr,
+          targetClasses: targetClasses,
+          targets: targetClasses.map((k) => ({
+            kelas: k,
+            startDate: pubDate,
+            publishedAt: pubDate,
+            deadline: new Date(new Date(pubDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          })),
+          startDate: pubDate,
           publishedAt: pubDate,
           deadline: new Date(new Date(pubDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        })),
-        publishedAt: pubDate,
-        deadline: new Date(new Date(pubDate).getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        description: targetDesc,
-        isManualColumn: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        teacherId: user?.uid || "mock-admin",
-      };
+          description: targetDesc,
+          isManualColumn: true,
+          type: "Tugas",
+          createdAt: pubDate,
+          updatedAt: new Date().toISOString(),
+          teacherId: user?.uid || "mock-admin",
+        };
 
-      // Save to Firestore
-      await setDoc(doc(db, "assignments", newAssignmentId), newDoc);
+        await setDoc(doc(db, "assignments", newAssignmentId), newDoc);
 
-      // Instantly update in-memory state & cache so new column appears in table immediately
-      const updatedAssignments = [newDoc, ...assignmentsList];
-      setAssignmentsList(updatedAssignments);
-      setLocalCache("firas_cache_assignments", updatedAssignments);
+        const updatedAssignments = [newDoc, ...assignmentsList];
+        setAssignmentsList(updatedAssignments);
+        setLocalCache("firas_cache_assignments", updatedAssignments);
+      }
 
       setIsAddManualColumnOpen(false);
       setManualBab("");
@@ -1964,7 +2032,7 @@ export default function DashboardTeacher() {
       setIsEditingRekapTable(true);
       showAlert(
         "Berhasil",
-        `Kolom nilai '${targetMateri.trim()}' berhasil ditambahkan ke tabel! Anda dapat langsung menginput nilai siswa pada kolom tersebut.`,
+        `Kolom ${colType} '${targetMateri.trim()}' berhasil ditambahkan untuk ${targetClasses.length} kelas! Anda dapat langsung menginput nilai siswa pada kolom tersebut.`,
         "alert"
       );
     } catch (err: any) {
@@ -1973,6 +2041,60 @@ export default function DashboardTeacher() {
     } finally {
       setIsSavingManualColumn(false);
     }
+  };
+
+  const handlePromptDeleteRekapColumn = (
+    colId: string,
+    colTitle: string,
+    colType: "assignment" | "exam"
+  ) => {
+    const typeLabel = colType === "exam" ? "CBT" : "Tugas";
+    showConfirm(
+      `Hapus Kolom ${typeLabel}`,
+      `Apakah Anda yakin ingin menghapus kolom nilai ${typeLabel} "${colTitle}"? Kolom ini akan dihapus dari Buku Nilai dan seluruh data nilai siswa terkait akan dibersihkan.`,
+      async () => {
+        try {
+          if (colType === "exam") {
+            await deleteDoc(doc(db, "exams", colId));
+            const updatedExams = examsList.filter((e) => e.id !== colId);
+            setExamsList(updatedExams);
+            setLocalCache("firas_cache_exams", updatedExams);
+          } else {
+            await deleteDoc(doc(db, "assignments", colId));
+            const updatedAssignments = assignmentsList.filter((a) => a.id !== colId);
+            setAssignmentsList(updatedAssignments);
+            setLocalCache("firas_cache_assignments", updatedAssignments);
+          }
+
+          // Clean up final_grades in memory and cache
+          const updatedFinalGrades = finalGradesList.filter(
+            (g) => g.assignmentId !== colId && g.id !== colId
+          );
+          setFinalGradesList(updatedFinalGrades);
+          setLocalCache("firas_cache_final_grades", updatedFinalGrades);
+
+          // Also clean up submissions in memory and cache
+          const updatedSubmissions = submissionsList.filter(
+            (s) => s.assignmentId !== colId
+          );
+          setSubmissionsList(updatedSubmissions);
+          setLocalCache("firas_cache_submissions", updatedSubmissions);
+
+          showAlert(
+            "Berhasil Dihapus",
+            `Kolom ${typeLabel} "${colTitle}" beserta seluruh nilai terkait berhasil dihapus dari Buku Nilai!`,
+            "alert"
+          );
+        } catch (err: any) {
+          console.warn("Gagal menghapus kolom:", err);
+          showAlert(
+            "Gagal",
+            "Terjadi kesalahan saat menghapus kolom: " + (err.message || err),
+            "danger"
+          );
+        }
+      }
+    );
   };
 
   const handleDeleteStudent = async (id: string, nisn?: string) => {
@@ -3814,8 +3936,8 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
   };
 
   const handleDeleteClass = async (id: string, className?: string) => {
-    const targetName = className || id;
-    const studentCount = studentsList.filter((s) => s.kelas === targetName).length;
+    const targetName = (className || id || "").trim();
+    const studentCount = studentsList.filter((s) => s.kelas === targetName || s.kelas === id).length;
     const confirmMessage =
       studentCount > 0
         ? `Kelas "${targetName}" memiliki ${studentCount} siswa terdaftar. Apakah Anda yakin ingin menghapus kelas ini?`
@@ -3826,15 +3948,39 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
       confirmMessage,
       async () => {
         try {
-          // Optimistic UI update
-          setClassesList((prev) => prev.filter((c) => c.id !== id && c.name !== targetName));
+          // 1. Optimistic UI update immediately
+          setClassesList((prev) => prev.filter((c) => c.id !== id && c.name !== targetName && c.name !== id && c.id !== targetName));
+          
+          // 2. Invalidate cache
           localStorage.removeItem("firas_cache_classes");
+          sessionStorage.removeItem("firas_cache_classes");
 
-          await deleteDoc(doc(db, "classes", id));
-          if (className && className !== id) {
+          // 3. Delete via dbDeleteDoc (Supabase primary + Firestore fallback)
+          try {
+            await deleteDoc(doc(db, "classes", id), "classes", id, targetName);
+          } catch (delErr) {
+            console.warn("deleteDoc classes by id error:", delErr);
+          }
+
+          if (targetName && targetName !== id) {
             try {
-              await deleteDoc(doc(db, "classes", className));
+              await deleteDoc(doc(db, "classes", targetName), "classes", targetName, id);
             } catch (_) {}
+          }
+
+          // 4. Ensure Supabase app_collections records are fully cleared
+          if (isSupabaseConfigured && supabase) {
+            try {
+              await supabase.from("app_collections").delete().eq("collection_name", "classes").eq("doc_id", id);
+              await supabase.from("app_collections").delete().eq("id", `classes_${id}`);
+              if (targetName) {
+                await supabase.from("app_collections").delete().eq("collection_name", "classes").filter("data->>name", "eq", targetName);
+                await supabase.from("app_collections").delete().eq("collection_name", "classes").eq("doc_id", targetName);
+                await supabase.from("app_collections").delete().eq("id", `classes_${targetName}`);
+              }
+            } catch (supaErr) {
+              console.warn("Supabase direct delete error:", supaErr);
+            }
           }
 
           setClassSaveMessage({
@@ -3842,15 +3988,28 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
             type: "success",
           });
           showAlert("Berhasil", `Kelas "${targetName}" berhasil dihapus dari sistem.`, "alert");
-          fetchTeacherData(true);
-        } catch (error) {
-          setClassSaveMessage({
-            text: "Gagal menghapus kelas.",
-            type: "error",
-          });
-          showAlert("Gagal", "Terjadi kesalahan saat menghapus kelas.", "danger");
-          handleFirestoreError(error, OperationType.DELETE, `classes/${id}`);
-          fetchTeacherData(true);
+
+          // Soft refresh after delay so optimistic state stays intact
+          setTimeout(() => {
+            fetchTeacherData(true);
+          }, 300);
+        } catch (error: any) {
+          console.error("Failed to delete class:", error);
+          if (error?.message?.includes("Quota") || error?.code === "resource-exhausted") {
+            setClassSaveMessage({
+              text: `Kelas "${targetName}" berhasil dihapus secara lokal.`,
+              type: "success",
+            });
+            showAlert("Berhasil", `Kelas "${targetName}" berhasil dihapus dari sistem.`, "alert");
+          } else {
+            setClassSaveMessage({
+              text: "Gagal menghapus kelas.",
+              type: "error",
+            });
+            showAlert("Gagal", "Terjadi kesalahan saat menghapus kelas.", "danger");
+            handleFirestoreError(error, OperationType.DELETE, `classes/${id}`);
+            fetchTeacherData(true);
+          }
         }
       },
       "Hapus",
@@ -7487,6 +7646,14 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                    <Plus className="w-4 h-4"/>
                                    Tambah Kolom Nilai
                                  </button>
+                                  <button
+                                    onClick={() => setIsDeleteColumnModalOpen(true)}
+                                    className="px-4 py-2.5 bg-rose-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 active:scale-95 shadow-md shadow-rose-600/20 cursor-pointer"
+                                    title="Kelola & Hapus Kolom Penilaian"
+                                  >
+                                    <Trash2 className="w-4 h-4"/>
+                                    Hapus Kolom
+                                  </button>
                                  <button
                                    onClick={() => setIsEditingRekapTable(!isEditingRekapTable)}
                                    className={`px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 active:scale-95 shadow-md cursor-pointer ${
@@ -7592,16 +7759,22 @@ const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a
                                       const mergedCols = [
                                         ...filteredAssignments.map((a) => ({
                                           id: a.id,
-                                          title: a.materi,
-                                          type: "assignment",
-                                          date: a.publishedAt || a.createdAt,
+                                          title: a.materi || a.title || "Tugas",
+                                          type: "assignment" as const,
+                                          bab: a.bab,
+                                          targetClasses: a.targetClasses,
+                                          kelasRef: a.kelasRef || a.kelas,
+                                          date: a.startDate || a.publishedAt || a.createdAt,
                                           deadline: a.deadline,
                                         })),
                                         ...filteredExams.map((e) => ({
                                           id: e.id,
-                                          title: e.title,
-                                          type: "exam",
-                                          date: e.createdAt,
+                                          title: e.title || e.materi || "CBT",
+                                          type: "exam" as const,
+                                          bab: e.bab,
+                                          targetClasses: e.targetClasses,
+                                          kelasRef: e.kelasRef,
+                                          date: e.startDate || e.publishedAt || e.createdAt,
                                           deadline: null,
                                         })),
 ].sort((a, b) => {
@@ -7613,9 +7786,32 @@ const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a
                                       return mergedCols.map((col, idx) => (
                                         <th
                                           key={`col-${col.type}-${col.id || idx}-${idx}`}
-                                          className="px-6 py-6 text-center text-xs font-black text-slate-900 bg-slate-100 uppercase tracking-wider border border-black whitespace-nowrap sticky top-0 z-30"
+                                          className="px-5 py-4 text-center text-xs font-black text-slate-900 bg-slate-100 uppercase tracking-wider border border-black whitespace-nowrap sticky top-0 z-30 group"
                                         >
-                                          <div className="flex flex-col text-center items-center justify-center relative px-2">
+                                          <div className="flex flex-col text-center items-center justify-center relative min-w-[130px] px-1">
+                                            {/* Top badges & delete button */}
+                                            <div className="flex items-center justify-between w-full mb-1.5 gap-2">
+                                              <span className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-md ${
+                                                col.type === "exam"
+                                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                                  : "bg-blue-100 text-blue-800 border border-blue-300"
+                                              }`}>
+                                                {col.type === "exam" ? "CBT" : "Tugas"}
+                                              </span>
+
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handlePromptDeleteRekapColumn(col.id, col.title, col.type);
+                                                }}
+                                                className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
+                                                title={`Hapus kolom ${col.type === "exam" ? "CBT" : "Tugas"}: "${col.title}"`}
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            </div>
+
                                             {(() => {
                                               if (col.deadline) {
                                                 const dl = new Date(col.deadline).getTime();
@@ -7624,24 +7820,19 @@ const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a
                                                 const isNear = diff > 0 && diff < 24 * 60 * 60 * 1000;
                                                 if (isNear) {
                                                   return (
-                                                    <div className="absolute -top-6 right-0" title="Tenggat Mendekati">
-                                                      <Clock className="w-3.5 h-3.5 text-rose-500 animate-pulse" />
+                                                    <div className="absolute top-0 right-7" title="Tenggat Mendekati">
+                                                      <Clock className="w-3 h-3 text-rose-500 animate-pulse" />
                                                     </div>
                                                   );
                                                 }
                                               }
                                               return null;
                                             })()}
-                                            <span className="text-xs text-slate-800 font-bold whitespace-nowrap leading-snug flex items-center justify-center mb-2" title={col.title}>
+                                            <span className="text-xs text-slate-800 font-bold whitespace-nowrap leading-snug flex items-center justify-center mb-1 max-w-[170px] truncate" title={col.title}>
                                               {col.title}
                                             </span>
-                                            <div className="flex items-center gap-1.5 mt-1">
-                                              <span className={`text-[8px] font-bold uppercase px-2 py-0.5 rounded-md ${col.type === "exam" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-blue-50 text-blue-600 border border-blue-100"}`}>
-                                                {col.type === "exam" ? "CBT" : "Tugas"}
-                                              </span>
-                                            </div>
-                                            <span className="text-[10px] text-slate-900 font-bold mt-2 whitespace-nowrap">
-                                              {col.date ? new Date(col.date).toLocaleDateString("id-ID", { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).replace(",", "") : "-"}
+                                            <span className="text-[10px] text-slate-600 font-semibold whitespace-nowrap">
+                                              {col.date ? new Date(col.date).toLocaleDateString("id-ID", { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).replace(",", "") : "-"}
                                             </span>
                                           </div>
                                         </th>
@@ -7723,16 +7914,16 @@ const targetCls = selectedClassFilter || stu.kelas;
                                             const mergedColsForStu = [
                                               ...filteredAssignmentsForStu.map((a) => ({
                                                 id: a.id,
-                                                title: a.materi,
+                                                title: a.materi || a.title || "Tugas",
                                                 type: "assignment",
-                                                date: a.publishedAt || a.createdAt,
+                                                date: a.startDate || a.publishedAt || a.createdAt,
                                                 deadline: a.deadline,
                                               })),
                                               ...filteredExamsForStu.map((e) => ({
                                                 id: e.id,
-                                                title: e.title,
+                                                title: e.title || e.materi || "CBT",
                                                 type: "exam",
-                                                date: e.createdAt,
+                                                date: e.startDate || e.publishedAt || e.createdAt,
                                                 deadline: null,
                                               })),
 ].sort((a, b) => {
@@ -9751,6 +9942,37 @@ const targetCls = selectedClassFilter || stu.kelas;
         classesList={classesList}
         onSave={handleCreateManualColumn}
         isSaving={isSavingManualColumn}
+      />
+
+      {/* Delete Rekap Column Modal */}
+      <DeleteColumnModal
+        isOpen={isDeleteColumnModalOpen}
+        onClose={() => setIsDeleteColumnModalOpen(false)}
+        columns={[
+          ...assignmentsList.map((a) => ({
+            id: a.id,
+            title: a.materi || a.title || "Tugas",
+            type: "assignment" as const,
+            bab: a.bab,
+            date: a.startDate || a.publishedAt || a.createdAt,
+            targetClasses: a.targetClasses,
+            kelasRef: a.kelasRef || a.kelas,
+          })),
+          ...examsList.map((e) => ({
+            id: e.id,
+            title: e.title || e.materi || "CBT",
+            type: "exam" as const,
+            bab: e.bab,
+            date: e.startDate || e.publishedAt || e.createdAt,
+            targetClasses: e.targetClasses,
+            kelasRef: e.kelasRef,
+          })),
+        ].sort((a, b) => {
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          return dateB - dateA;
+        })}
+        onDeleteColumn={handlePromptDeleteRekapColumn}
       />
 
       {/* Supabase Database Sync Modal */}

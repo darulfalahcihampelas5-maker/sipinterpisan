@@ -2380,6 +2380,23 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
         : (fGrade?.nilai !== undefined && fGrade?.nilai !== null && fGrade?.nilai !== "" ? fGrade.nilai : null);
 
       if (gradeVal !== null && gradeVal !== undefined) {
+        const isManual = Boolean(assign.isManualColumn || fGrade?.isManualColumn || !submission?.submittedAt);
+        const startDateRaw = assign.startDate || assign.publishedAt || assign.createdAt || fGrade?.startDate || fGrade?.publishedAt;
+        const formattedStartDate = startDateRaw ? new Date(startDateRaw).toLocaleDateString("id-ID", {
+          day: "numeric",
+          month: "short",
+          year: "numeric"
+        }) : "-";
+
+        const submitDateRaw = submission?.submittedAt;
+        const formattedSubmitDate = submitDateRaw ? new Date(submitDateRaw).toLocaleDateString("id-ID", {
+          day: "numeric",
+          month: "short",
+          year: "numeric"
+        }) : null;
+
+        const displayDate = formattedSubmitDate || formattedStartDate;
+
         list.push({
           id: assign.id,
           title: assign.title || assign.materi,
@@ -2387,12 +2404,11 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
           subtitle: assign.description || "Tugas Mandiri/Kelompok",
           type: "Tugas",
           nilai: Number(gradeVal),
-          tanggal: (submission?.submittedAt || fGrade?.gradedAt) ? new Date(submission?.submittedAt || fGrade?.gradedAt).toLocaleDateString("id-ID", {
-            day: "numeric",
-            month: "short",
-            year: "numeric"
-          }) : "-",
-          rawDate: submission?.submittedAt || fGrade?.gradedAt || ""
+          isManual,
+          tanggalMulai: formattedStartDate,
+          tanggalSubmit: formattedSubmitDate,
+          tanggal: displayDate,
+          rawDate: startDateRaw || submission?.submittedAt || fGrade?.gradedAt || ""
         });
       }
     });
@@ -2400,6 +2416,14 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
     examsList.forEach((exam: any) => {
       const fGrade = finalGradesList.find((f: any) => (f.assignmentId === exam.id || f.id === `${exam.id}_${student.nisn}`) && f.nisn === student.nisn);
       if (fGrade && fGrade.nilai !== undefined && fGrade.nilai !== null && fGrade.nilai !== "") {
+        const isManual = Boolean(exam.isManualColumn || fGrade?.isManualColumn || exam.isManual);
+        const startDateRaw = exam.startDate || exam.publishedAt || exam.createdAt || fGrade?.startDate || fGrade?.publishedAt;
+        const formattedStartDate = startDateRaw ? new Date(startDateRaw).toLocaleDateString("id-ID", {
+          day: "numeric",
+          month: "short",
+          year: "numeric"
+        }) : "-";
+
         list.push({
           id: exam.id,
           title: exam.title || fGrade.title || "Ujian CBT",
@@ -2407,12 +2431,10 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
           subtitle: "Ujian / Evaluasi",
           type: "Ujian",
           nilai: Number(fGrade.nilai),
-          tanggal: fGrade.gradedAt ? new Date(fGrade.gradedAt).toLocaleDateString("id-ID", {
-            day: "numeric",
-            month: "short",
-            year: "numeric"
-          }) : "-",
-          rawDate: fGrade.gradedAt || ""
+          isManual,
+          tanggalMulai: formattedStartDate,
+          tanggal: formattedStartDate,
+          rawDate: startDateRaw || fGrade.gradedAt || ""
         });
       }
     });
@@ -2422,7 +2444,17 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
       if (fGrade.nisn === student.nisn && fGrade.nilai !== undefined && fGrade.nilai !== null && fGrade.nilai !== "") {
         const alreadyInList = list.some(item => item.id === fGrade.assignmentId || item.id === fGrade.id);
         if (!alreadyInList) {
-          const isExam = (fGrade.assignmentId && (fGrade.assignmentId.startsWith("EXM-") || fGrade.assignmentId.startsWith("ujian-")));
+          const isExam = (fGrade.assignmentId && (fGrade.assignmentId.startsWith("EXM-") || fGrade.assignmentId.startsWith("ujian-") || fGrade.type === "CBT" || fGrade.type === "exam"));
+          const asgMatch = assignmentsList.find(a => a.id === fGrade.assignmentId);
+          const exmMatch = examsList.find(e => e.id === fGrade.assignmentId);
+
+          const startDateRaw = fGrade.startDate || fGrade.publishedAt || asgMatch?.startDate || asgMatch?.publishedAt || asgMatch?.createdAt || exmMatch?.startDate || exmMatch?.publishedAt || exmMatch?.createdAt;
+          const formattedStartDate = startDateRaw ? new Date(startDateRaw).toLocaleDateString("id-ID", {
+            day: "numeric",
+            month: "short",
+            year: "numeric"
+          }) : (fGrade.gradedAt ? new Date(fGrade.gradedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-");
+
           list.push({
             id: fGrade.assignmentId || fGrade.id,
             title: fGrade.title || fGrade.materi || (isExam ? "Ujian CBT" : "Tugas Penilaian Guru"),
@@ -2430,12 +2462,10 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
             subtitle: isExam ? "Ujian / Evaluasi" : (fGrade.description || "Tugas / Penilaian"),
             type: isExam ? "Ujian" : "Tugas",
             nilai: Number(fGrade.nilai),
-            tanggal: fGrade.gradedAt ? new Date(fGrade.gradedAt).toLocaleDateString("id-ID", {
-              day: "numeric",
-              month: "short",
-              year: "numeric"
-            }) : "-",
-            rawDate: fGrade.gradedAt || ""
+            isManual: true,
+            tanggalMulai: formattedStartDate,
+            tanggal: formattedStartDate,
+            rawDate: startDateRaw || fGrade.gradedAt || ""
           });
         }
       }
@@ -6024,7 +6054,7 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
                                     <th className="py-4 px-4 text-center w-12 bg-slate-50 font-black text-xs text-slate-500 uppercase tracking-widest whitespace-nowrap rounded-tl-2xl">No</th>
                                     <th className="py-4 px-4 bg-slate-50 font-black text-xs text-slate-500 uppercase tracking-widest whitespace-nowrap">Nama Bab</th>
                                     <th className="py-4 px-4 bg-slate-50 font-black text-xs text-slate-500 uppercase tracking-widest whitespace-nowrap">Tugas Ke</th>
-                                    <th className="py-4 px-4 text-center bg-slate-50 font-black text-xs text-slate-500 uppercase tracking-widest whitespace-nowrap">Tanggal Pengumpulan Tugas</th>
+                                    <th className="py-4 px-4 text-center bg-slate-50 font-black text-xs text-slate-500 uppercase tracking-widest whitespace-nowrap">Tanggal Mulai / Pengumpulan</th>
                                     <th className="py-4 px-4 text-center bg-slate-50 font-black text-xs text-slate-500 uppercase tracking-widest whitespace-nowrap">Nilai Tugas</th>
                                     <th className="py-4 px-4 text-center bg-slate-50 font-black text-xs text-slate-500 uppercase tracking-widest whitespace-nowrap rounded-tr-2xl">Predikat Nilai</th>
                                 </tr>
@@ -6105,9 +6135,23 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
                                           </div>
                                         </td>
 
-                                        {/* 4. Tanggal Pengumpulan Tugas */}
+                                        {/* 4. Tanggal Mulai / Pengumpulan */}
                                         <td className="py-4 px-4 text-center font-bold text-slate-600 whitespace-nowrap">
-                                          {g.tanggal}
+                                          <div className="flex flex-col items-center justify-center gap-0.5">
+                                            {g.isManual ? (
+                                              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
+                                                <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider">Mulai:</span>
+                                                <span>{g.tanggalMulai || g.tanggal}</span>
+                                              </span>
+                                            ) : (
+                                              <>
+                                                <span className="text-xs text-slate-800 font-bold">{g.tanggal}</span>
+                                                {g.tanggalMulai && g.tanggalMulai !== "-" && g.tanggalMulai !== g.tanggal && (
+                                                  <span className="text-[10px] text-slate-400 font-semibold">Mulai: {g.tanggalMulai}</span>
+                                                )}
+                                              </>
+                                            )}
+                                          </div>
                                         </td>
 
                                         {/* 5. Nilai Tugas */}

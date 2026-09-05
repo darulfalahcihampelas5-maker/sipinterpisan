@@ -665,16 +665,17 @@ export async function dbSetDoc(docRef: any, data: any, options?: any): Promise<v
 }
 
 // Transparent delete wrapper: deleteDoc replacement
-export async function dbDeleteDoc(docRef: any): Promise<void> {
+export async function dbDeleteDoc(docRef: any, collectionNameParam?: string, docIdParam?: string, extraParam?: string): Promise<void> {
   const pathSegments = docRef?.path?.split("/");
-  if (!pathSegments || pathSegments.length < 2) {
+  const collectionName = collectionNameParam || (pathSegments && pathSegments.length >= 2 ? pathSegments[0] : "");
+  const docId = docIdParam || (pathSegments && pathSegments.length >= 2 ? pathSegments[1] : "");
+
+  if (!collectionName || !docId) {
     try {
       await deleteDoc(docRef);
     } catch (_) {}
     return;
   }
-  const collectionName = pathSegments[0];
-  const docId = pathSegments[1];
 
   // 1. Delete from Supabase first (Primary Source)
   if (isSupabaseConfigured && supabase) {
@@ -691,6 +692,11 @@ export async function dbDeleteDoc(docRef: any): Promise<void> {
         await supabase.from("app_collections").delete().eq("id", id);
         await supabase.from("app_collections").delete().eq("collection_name", "classes").eq("doc_id", docId);
         await supabase.from("app_collections").delete().eq("collection_name", "classes").filter("data->>name", "eq", docId);
+        if (extraParam && extraParam !== docId) {
+          await supabase.from("app_collections").delete().eq("id", `classes_${extraParam}`);
+          await supabase.from("app_collections").delete().eq("collection_name", "classes").eq("doc_id", extraParam);
+          await supabase.from("app_collections").delete().eq("collection_name", "classes").filter("data->>name", "eq", extraParam);
+        }
       } else {
         const id = `${collectionName}_${docId}`;
         await supabase.from("app_collections").delete().eq("id", id);
