@@ -111,7 +111,7 @@ import { DeleteColumnModal } from "../components/teacher/DeleteColumnModal";
 import { EditColumnModal, ColumnEditData } from "../components/teacher/EditColumnModal";
 import { getFinalGrades, saveFinalGrade, subscribeToFinalGrades } from "../lib/supabaseSync";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-import { isAssignmentForClass, isExamForClass } from "../lib/gradeUtils";
+import { isAssignmentForClass, isExamForClass, isClassMatch, normalizeClassName } from "../lib/gradeUtils";
 
 const trackUsage = (reads = 0, writes = 0) => {
   try {
@@ -1482,10 +1482,8 @@ export default function DashboardTeacher() {
             const dateB = new Date(b.publishedAt || b.createdAt || 0).getTime();
             return dateB - dateA;
           });
-          if (tasks.length > 0) {
-            setAssignmentsList(tasks);
-            setLocalCache("firas_cache_assignments_v2", tasks);
-          }
+          setAssignmentsList(tasks);
+          setLocalCache("firas_cache_assignments_v2", tasks);
         } catch (e) {
           console.warn("Failed fetching assignments:", e);
         }
@@ -1583,10 +1581,8 @@ export default function DashboardTeacher() {
             const dateB = new Date(b.createdAt || 0).getTime();
             return dateB - dateA;
           });
-          if (exams.length > 0) {
-            setExamsList(exams);
-            setLocalCache("firas_cache_exams_v2", exams);
-          }
+          setExamsList(exams);
+          setLocalCache("firas_cache_exams_v2", exams);
         } catch (e) {
           console.warn("Failed fetching exams:", e);
         }
@@ -2551,7 +2547,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
   const rankings = useMemo(() => {
     if (!selectedClassFilter || studentsList.length === 0 || !rubric) return new Map();
     
-    const studentsInClass = studentsList.filter(s => s.kelas === selectedClassFilter);
+    const studentsInClass = studentsList.filter(s => isClassMatch(s.kelas, selectedClassFilter));
     if (studentsInClass.length === 0) return new Map();
 
     const studentPerformance = studentsInClass.map((stu: any) => {
@@ -2559,7 +2555,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
       let stuHadirCount = 0;
       let stuTotalMeetings = 0;
       absensiList.forEach((a: any) => {
-        if (a.kelasRef === selectedClassFilter) {
+        if (isClassMatch(a.kelasRef, selectedClassFilter)) {
           stuTotalMeetings++;
           if (a.data && a.data[stu.nisn]) {
             const sStatus = String(a.data[stu.nisn]).toLowerCase();
@@ -2621,11 +2617,46 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
     return rankMap;
   }, [studentsList, selectedClassFilter, finalGradesList, absensiList, examsList, rubric]);
 
+  const rekapTableColumns = useMemo(() => {
+    const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a, selectedClassFilter));
+    const filteredExams = examsList.filter((e) => isExamForClass(e, selectedClassFilter));
+
+    return [
+      ...filteredAssignments.map((a) => ({
+        id: a.id,
+        title: a.materi || a.title || "Tugas",
+        type: "assignment" as const,
+        bab: a.bab,
+        targetClasses: a.targetClasses,
+        kelasRef: a.kelasRef || a.kelas,
+        date: a.startDate || a.publishedAt || a.createdAt,
+        deadline: a.deadline,
+        rawDoc: a,
+      })),
+      ...filteredExams.map((e) => ({
+        id: e.id,
+        title: e.title || e.materi || "CBT",
+        type: "exam" as const,
+        bab: e.bab,
+        targetClasses: e.targetClasses,
+        kelasRef: e.kelasRef,
+        date: e.startDate || e.publishedAt || e.createdAt,
+        deadline: null,
+        rawDoc: e,
+      })),
+    ].sort((a, b) => {
+      const dateA = a.date ? new Date(a.date).getTime() : 0;
+      const dateB = b.date ? new Date(b.date).getTime() : 0;
+      if (dateA !== dateB) return dateA - dateB;
+      return (a.id || "").localeCompare(b.id || "");
+    });
+  }, [assignmentsList, examsList, selectedClassFilter]);
+
   const attendanceAnalysis = useMemo(() => {
     if (!analysisClass) return [];
     
-    const classStudents = studentsList.filter(s => s.kelas === analysisClass);
-    const classAbsensi = absensiList.filter(a => a.kelasRef === analysisClass);
+    const classStudents = studentsList.filter(s => isClassMatch(s.kelas, analysisClass));
+    const classAbsensi = absensiList.filter(a => isClassMatch(a.kelasRef, analysisClass));
     
     return classStudents.map(student => {
       const stats = {
@@ -7413,7 +7444,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                             selectedAssignmentFilter
                                           : true;
                                         const matchClass = selectedClassFilter
-                                          ? sub.kelas === selectedClassFilter
+                                          ? isClassMatch(sub.kelas, selectedClassFilter)
                                           : true;
                                         const student = studentsList.find(s => s.nisn === sub.nisn);
                                         const studentDisplayName = (student?.displayName || student?.studentName || student?.name || sub.studentName || "").toLowerCase();
@@ -8037,38 +8068,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                     <th className="px-6 py-6 text-center text-sm font-black text-slate-900 bg-slate-100 uppercase tracking-wider sticky top-0 z-30 border border-black whitespace-nowrap">
                                       Nilai Kehadiran
                                     </th>
-                                    {(() => {
-                                      const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a, selectedClassFilter));
-                                      const filteredExams = examsList.filter((e) => isExamForClass(e, selectedClassFilter));
-
-                                      const mergedCols = [
-                                        ...filteredAssignments.map((a) => ({
-                                          id: a.id,
-                                          title: a.materi || a.title || "Tugas",
-                                          type: "assignment" as const,
-                                          bab: a.bab,
-                                          targetClasses: a.targetClasses,
-                                          kelasRef: a.kelasRef || a.kelas,
-                                          date: a.startDate || a.publishedAt || a.createdAt,
-                                          deadline: a.deadline,
-                                        })),
-                                        ...filteredExams.map((e) => ({
-                                          id: e.id,
-                                          title: e.title || e.materi || "CBT",
-                                          type: "exam" as const,
-                                          bab: e.bab,
-                                          targetClasses: e.targetClasses,
-                                          kelasRef: e.kelasRef,
-                                          date: e.startDate || e.publishedAt || e.createdAt,
-                                          deadline: null,
-                                        })),
-].sort((a, b) => {
-                                        const dateA = a.date ? new Date(a.date).getTime() : 0;
-                                        const dateB = b.date ? new Date(b.date).getTime() : 0;
-                                        return dateA - dateB;
-                                      });
-
-                                      return mergedCols.map((col, idx) => (
+                                    {rekapTableColumns.map((col, idx) => (
                                         <th
                                           key={`col-${col.type}-${col.id || idx}-${idx}`}
                                           className="px-5 py-4 text-center text-xs font-black text-slate-900 bg-slate-100 uppercase tracking-wider border border-black whitespace-nowrap sticky top-0 z-30 group"
@@ -8134,8 +8134,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                             </span>
                                           </div>
                                         </th>
-                                      ));
-                                    })()}
+                                      ))}
                                     
                                     <th className="px-6 py-6 text-center text-sm font-black text-slate-900 bg-slate-100 uppercase tracking-wider sticky top-0 border border-black whitespace-nowrap z-30">
                                       Nilai Rapor
@@ -8149,7 +8148,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                   {studentsList
                                     .filter((stu) => {
                                       const matchClass = selectedClassFilter
-                                        ? stu.kelas === selectedClassFilter
+                                        ? isClassMatch(stu.kelas, selectedClassFilter)
                                         : true;
                                       const matchSearch = studentSearchQuery
                                         ? (stu.displayName || stu.studentName || "").toLowerCase().includes(studentSearchQuery.toLowerCase()) ||
@@ -8204,109 +8203,88 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                               );
                                             })()}
                                           </td>
-                                          {(() => {
-                                            const targetCls = selectedClassFilter || stu.kelas;
-                                            const filteredAssignmentsForStu = assignmentsList.filter((a) => isAssignmentForClass(a, targetCls));
-                                            const filteredExamsForStu = examsList.filter((e) => isExamForClass(e, targetCls));
+                                          {rekapTableColumns.map((col, colIdx) => {
+                                            const isColApplicable = col.type === "assignment"
+                                              ? isAssignmentForClass(col.rawDoc || col, stu.kelas)
+                                              : isExamForClass(col.rawDoc || col, stu.kelas);
 
-                                            const mergedColsForStu = [
-                                              ...filteredAssignmentsForStu.map((a) => ({
-                                                id: a.id,
-                                                title: a.materi || a.title || "Tugas",
-                                                type: "assignment",
-                                                date: a.startDate || a.publishedAt || a.createdAt,
-                                                deadline: a.deadline,
-                                              })),
-                                              ...filteredExamsForStu.map((e) => ({
-                                                id: e.id,
-                                                title: e.title || e.materi || "CBT",
-                                                type: "exam",
-                                                date: e.startDate || e.publishedAt || e.createdAt,
-                                                deadline: null,
-                                              })),
-].sort((a, b) => {
-                                              const dateA = a.date ? new Date(a.date).getTime() : 0;
-                                              const dateB = b.date ? new Date(b.date).getTime() : 0;
-                                              return dateA - dateB;
-                                            });
-
-                                            return mergedColsForStu.map((col, colIdx) => {
-                                              let score = "";
-                                              if (col.type === "assignment") {
-                                                const sub = studentSubs.find(
-                                                  (s) => s.assignmentId === col.id
-                                                );
-                                                const fGrade = finalGradesList.find(
-                                                  (f) =>
-                                                    f.assignmentId === col.id &&
-                                                    f.nisn === stu.nisn
-                                                );
-                                                score = sub?.nilai || fGrade?.nilai || "";
-                                              } else {
-                                                const fGrade = finalGradesList.find(
-                                                  (f) =>
-                                                    f.assignmentId === col.id &&
-                                                    f.nisn === stu.nisn
-                                                );
-                                                score = fGrade?.nilai || "";
-                                              }
-
-                                              const cellKey = `${col.id}_${stu.nisn}`;
-                                              const isEdited = editedRekapGrades[cellKey] !== undefined;
-                                              const activeScoreStr = isEdited
-                                                ? editedRekapGrades[cellKey]
-                                                : (score !== undefined && score !== null ? String(score) : "");
-
-                                              if (activeScoreStr !== "") {
-                                                totalScore += Number(activeScoreStr);
-                                                count++;
-                                              }
-
-                                              return (
-                                                <td
-                                                  key={`col-${col.type}-${col.id || colIdx}-${colIdx}`}
-                                                  className={`px-3 py-2 text-center whitespace-nowrap border border-black font-bold transition-colors ${
-                                                    isEdited ? "bg-amber-100/90 text-amber-950" : "bg-white text-slate-900"
-                                                  }`}
-                                                >
-                                                  {isEditingRekapTable ? (
-                                                    <input
-                                                      type="number"
-                                                      min="0"
-                                                      max="100"
-                                                      value={activeScoreStr}
-                                                      placeholder="0-100"
-                                                      onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        setEditedRekapGrades((prev) => ({
-                                                          ...prev,
-                                                          [cellKey]: val,
-                                                        }));
-                                                      }}
-                                                      className="w-16 h-8 text-center font-mono font-black text-xs text-slate-900 bg-amber-50 border-2 border-amber-400 focus:bg-white focus:border-[#85cc00] focus:ring-2 focus:ring-[#85cc00]/20 rounded-md outline-none transition-all"
-                                                    />
-                                                  ) : (
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => setIsEditingRekapTable(true)}
-                                                      className="group/cell w-full h-full inline-flex items-center justify-center gap-1 hover:text-[#85cc00] cursor-pointer"
-                                                      title="Klik untuk mengedit nilai pada tabel"
-                                                    >
-                                                      {activeScoreStr ? (
-                                                        <span className={`text-sm font-mono font-black ${isEdited ? "text-amber-800" : "text-slate-900"}`}>
-                                                          {activeScoreStr}
-                                                        </span>
-                                                      ) : (
-                                                        <span className={`text-sm font-mono font-black ${isEdited ? "text-amber-800" : "text-slate-500"}`}>
-                                                          0
-                                                        </span>
-                                                      )}
-                                                    </button>
-                                                  )}
-                                                </td>
+                                            let score = "";
+                                            if (col.type === "assignment") {
+                                              const sub = studentSubs.find(
+                                                (s) => s.assignmentId === col.id
                                               );
-                                            });
-                                          })()}
+                                              const fGrade = finalGradesList.find(
+                                                (f) =>
+                                                  f.assignmentId === col.id &&
+                                                  f.nisn === stu.nisn
+                                              );
+                                              score = sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" ? sub.nilai : (fGrade?.nilai ?? "");
+                                            } else {
+                                              const fGrade = finalGradesList.find(
+                                                (f) =>
+                                                  (f.assignmentId === col.id || f.alignmentId === col.id) &&
+                                                  f.nisn === stu.nisn
+                                              );
+                                              score = fGrade?.nilai !== undefined && fGrade?.nilai !== null && fGrade?.nilai !== "" ? fGrade.nilai : "";
+                                            }
+
+                                            const cellKey = `${col.id}_${stu.nisn}`;
+                                            const isEdited = editedRekapGrades[cellKey] !== undefined;
+                                            const activeScoreStr = isEdited
+                                              ? editedRekapGrades[cellKey]
+                                              : (score !== undefined && score !== null ? String(score) : "");
+
+                                            if (activeScoreStr !== "") {
+                                              totalScore += Number(activeScoreStr);
+                                              count++;
+                                            }
+
+                                            return (
+                                              <td
+                                                key={`col-${col.type}-${col.id || colIdx}-${colIdx}`}
+                                                className={`px-3 py-2 text-center whitespace-nowrap border border-black font-bold transition-colors ${
+                                                  isEdited ? "bg-amber-100/90 text-amber-950" : "bg-white text-slate-900"
+                                                }`}
+                                              >
+                                                {!isColApplicable && !activeScoreStr ? (
+                                                  <span className="text-slate-300 font-mono text-xs">-</span>
+                                                ) : isEditingRekapTable ? (
+                                                  <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    value={activeScoreStr}
+                                                    placeholder="0-100"
+                                                    onChange={(e) => {
+                                                      const val = e.target.value;
+                                                      setEditedRekapGrades((prev) => ({
+                                                        ...prev,
+                                                        [cellKey]: val,
+                                                      }));
+                                                    }}
+                                                    className="w-16 h-8 text-center font-mono font-black text-xs text-slate-900 bg-amber-50 border-2 border-amber-400 focus:bg-white focus:border-[#85cc00] focus:ring-2 focus:ring-[#85cc00]/20 rounded-md outline-none transition-all"
+                                                  />
+                                                ) : (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setIsEditingRekapTable(true)}
+                                                    className="group/cell w-full h-full inline-flex items-center justify-center gap-1 hover:text-[#85cc00] cursor-pointer"
+                                                    title="Klik untuk mengedit nilai pada tabel"
+                                                  >
+                                                    {activeScoreStr ? (
+                                                      <span className={`text-sm font-mono font-black ${isEdited ? "text-amber-800" : "text-slate-900"}`}>
+                                                        {activeScoreStr}
+                                                      </span>
+                                                    ) : (
+                                                      <span className={`text-sm font-mono font-black ${isEdited ? "text-amber-800" : "text-slate-500"}`}>
+                                                        0
+                                                      </span>
+                                                    )}
+                                                  </button>
+                                                )}
+                                              </td>
+                                            );
+                                          })}
                                           
                                           <td className="px-6 py-5 text-center whitespace-nowrap bg-white border border-black text-slate-900 font-bold">
                                              {(() => {
