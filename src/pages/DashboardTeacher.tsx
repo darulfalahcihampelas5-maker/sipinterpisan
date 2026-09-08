@@ -2127,7 +2127,7 @@ export default function DashboardTeacher() {
             }
 
             const docRef = doc(db, colType === "exam" ? "exams" : "assignments", colId);
-            await updateDoc(docRef, updatedDocData);
+            await setDoc(docRef, updatedDocData, { merge: true });
 
             // Update in-memory state
             if (colType === "exam") {
@@ -2149,6 +2149,7 @@ export default function DashboardTeacher() {
               `Kolom ${typeLabel} "${colTitle}" berhasil dihapus dari Kelas ${currentClass}. Kolom di kelas lain tetap aman tersimpan!`,
               "alert"
             );
+            fetchTeacherData(false);
           } catch (err: any) {
             console.warn("Gagal memperbarui kolom kelas:", err);
             showAlert(
