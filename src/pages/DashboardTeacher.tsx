@@ -8455,17 +8455,47 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                     <option value="">Pilih Bab Pembelajaran...</option>
                                     <option value="Informatika dan Keterampilan Generik">Informatika dan Keterampilan Generik</option>
                                     <option value="Bab 1: Informatika dan Keterampilan Generik">Bab 1: Informatika dan Keterampilan Generik</option>
-                                    {chaptersList.map((c, idx) => (
-                                      <option key={`chap-materi-${c.id || c.name || idx}-${idx}`} value={c.name}>
-                                        {c.name}
-                                      </option>
-                                    ))}
-                                    <option value="Algoritma & Pemrograman">Algoritma & Pemrograman</option>
-                                    <option value="Dampak Sosial Informatika">Dampak Sosial Informatika</option>
+                                    <option value="Berpikir Komputasional">Berpikir Komputasional</option>
+                                    <option value="Berpikir Komputasional (BK)">Berpikir Komputasional (BK)</option>
+                                    <option value="Bab 2: Berpikir Komputasional (BK)">Bab 2: Berpikir Komputasional (BK)</option>
+                                    <option value="Teknologi Informasi dan Komunikasi">Teknologi Informasi dan Komunikasi</option>
                                     <option value="Teknologi Informasi & Komunikasi">Teknologi Informasi & Komunikasi</option>
+                                    <option value="Bab 3: Teknologi Informasi dan Komunikasi (TIK)">Bab 3: Teknologi Informasi dan Komunikasi (TIK)</option>
                                     <option value="Sistem Komputer">Sistem Komputer</option>
+                                    <option value="Bab 4: Sistem Komputer (SK)">Bab 4: Sistem Komputer (SK)</option>
+                                    <option value="Jaringan Komputer dan Internet">Jaringan Komputer dan Internet</option>
                                     <option value="Jaringan Komputer & Internet">Jaringan Komputer & Internet</option>
+                                    <option value="Bab 5: Jaringan Komputer dan Internet (JKI)">Bab 5: Jaringan Komputer dan Internet (JKI)</option>
                                     <option value="Analisis Data">Analisis Data</option>
+                                    <option value="Bab 6: Analisis Data (AD)">Bab 6: Analisis Data (AD)</option>
+                                    <option value="Algoritma dan Pemrograman">Algoritma dan Pemrograman</option>
+                                    <option value="Algoritma & Pemrograman">Algoritma & Pemrograman</option>
+                                    <option value="Bab 7: Algoritma dan Pemrograman (AP)">Bab 7: Algoritma dan Pemrograman (AP)</option>
+                                    <option value="Dampak Sosial Informatika">Dampak Sosial Informatika</option>
+                                    <option value="Bab 8: Dampak Sosial Informatika (DSI)">Bab 8: Dampak Sosial Informatika (DSI)</option>
+                                    <option value="Praktik Lintas Bidang">Praktik Lintas Bidang</option>
+                                    <option value="Bab 9: Praktik Lintas Bidang (PLB)">Bab 9: Praktik Lintas Bidang (PLB)</option>
+                                    {chaptersList.map((c, idx) => {
+                                      const defaultNames = [
+                                        "Informatika dan Keterampilan Generik", "Bab 1: Informatika dan Keterampilan Generik",
+                                        "Berpikir Komputasional", "Berpikir Komputasional (BK)", "Bab 2: Berpikir Komputasional (BK)",
+                                        "Teknologi Informasi dan Komunikasi", "Teknologi Informasi & Komunikasi", "Bab 3: Teknologi Informasi dan Komunikasi (TIK)",
+                                        "Sistem Komputer", "Bab 4: Sistem Komputer (SK)",
+                                        "Jaringan Komputer dan Internet", "Jaringan Komputer & Internet", "Bab 5: Jaringan Komputer dan Internet (JKI)",
+                                        "Analisis Data", "Bab 6: Analisis Data (AD)",
+                                        "Algoritma dan Pemrograman", "Algoritma & Pemrograman", "Bab 7: Algoritma dan Pemrograman (AP)",
+                                        "Dampak Sosial Informatika", "Bab 8: Dampak Sosial Informatika (DSI)",
+                                        "Praktik Lintas Bidang", "Bab 9: Praktik Lintas Bidang (PLB)"
+                                      ];
+                                      if (c.name && !defaultNames.includes(c.name)) {
+                                        return (
+                                          <option key={`chap-materi-${c.id || c.name || idx}-${idx}`} value={c.name}>
+                                            {c.name}
+                                          </option>
+                                        );
+                                      }
+                                      return null;
+                                    })}
                                   </select>
                                 </div>
                               </div>
