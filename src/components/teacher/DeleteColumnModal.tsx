@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Trash2, X, Search, FileText, MonitorPlay, AlertTriangle, CheckCircle2, Pencil } from "lucide-react";
+import { Trash2, X, Search, FileText, MonitorPlay, AlertTriangle, CheckCircle2, Pencil, ShieldAlert } from "lucide-react";
 
 export interface RekapColumnItem {
   id: string;
@@ -16,8 +16,9 @@ interface DeleteColumnModalProps {
   isOpen: boolean;
   onClose: () => void;
   columns: RekapColumnItem[];
-  onDeleteColumn: (id: string, title: string, type: "assignment" | "exam") => Promise<void> | void;
+  onDeleteColumn: (id: string, title: string, type: "assignment" | "exam", scope?: "class_only" | "all_classes") => Promise<void> | void;
   onEditColumn?: (col: RekapColumnItem) => void;
+  selectedClass?: string;
 }
 
 export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
@@ -26,12 +27,19 @@ export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
   columns,
   onDeleteColumn,
   onEditColumn,
+  selectedClass,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "assignment" | "exam">("ALL");
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const isSpecificClassActive =
+    !!selectedClass &&
+    selectedClass !== "SEMUA_KELAS" &&
+    selectedClass !== "ALL" &&
+    selectedClass !== "Semua Kelas";
 
   const filteredColumns = columns.filter((col) => {
     const matchesSearch =
@@ -41,10 +49,10 @@ export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
     return matchesSearch && matchesType;
   });
 
-  const handleDelete = async (col: RekapColumnItem) => {
+  const handleDelete = async (col: RekapColumnItem, scope?: "class_only" | "all_classes") => {
     setDeletingId(col.id);
     try {
-      await onDeleteColumn(col.id, col.title, col.type);
+      await onDeleteColumn(col.id, col.title, col.type, scope);
     } finally {
       setDeletingId(null);
     }
@@ -62,9 +70,16 @@ export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
             <div>
               <h3 className="font-bold text-base text-white flex items-center gap-2">
                 Hapus Kolom Buku Nilai
+                {isSpecificClassActive && (
+                  <span className="text-[10px] bg-rose-500/30 text-rose-200 border border-rose-400/40 px-2 py-0.5 rounded-full font-bold">
+                    Filter: {selectedClass}
+                  </span>
+                )}
               </h3>
               <p className="text-xs text-slate-300">
-                Pilih kolom penilaian (Tugas atau CBT) yang ingin dihapus dari tabel Rekap
+                {isSpecificClassActive
+                  ? `Menghapus kolom hanya akan melepaskan penilaian dari Kelas ${selectedClass} tanpa menghapus data kelas lain`
+                  : "Pilih kolom penilaian (Tugas atau CBT) yang ingin dihapus dari tabel Rekap"}
               </p>
             </div>
           </div>
@@ -130,10 +145,16 @@ export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
         </div>
 
         {/* Warning Callout */}
-        <div className="px-5 py-3 bg-amber-50/80 border-b border-amber-200/60 flex items-start gap-2.5 text-xs text-amber-800">
-          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+        <div className={`px-5 py-3 border-b flex items-start gap-2.5 text-xs ${
+          isSpecificClassActive
+            ? "bg-blue-50/80 border-blue-200/60 text-blue-900"
+            : "bg-amber-50/80 border-amber-200/60 text-amber-800"
+        }`}>
+          <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${isSpecificClassActive ? "text-blue-600" : "text-amber-600"}`} />
           <p className="leading-relaxed">
-            Menghapus kolom penilaian akan menghapus kolom dari Buku Nilai dan membersihkan seluruh riwayat nilai siswa yang tersimpan pada kolom tersebut.
+            {isSpecificClassActive
+              ? `Saat ini Anda memfilter Kelas ${selectedClass}. Tombol "Hapus" hanya akan menghapus kolom dari Kelas ${selectedClass}. Nilai dan tugas kelas lain tetap terjaga aman.`
+              : "Menghapus kolom saat mode 'Semua Kelas' akan menghapus kolom dan seluruh data penilaian terkait secara permanen."}
           </p>
         </div>
 
@@ -159,6 +180,11 @@ export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
                 col.targetClasses && col.targetClasses.length > 0
                   ? col.targetClasses.join(", ")
                   : col.kelasRef || col.kelas || "Semua Kelas";
+
+              const isMultiClass =
+                (col.targetClasses && col.targetClasses.length > 1) ||
+                (col.kelas && col.kelas.includes(",")) ||
+                !col.targetClasses;
 
               return (
                 <div
@@ -211,26 +237,46 @@ export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
                           onEditColumn(col);
                         }}
                         disabled={isDeleting}
-                        className="px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-600 text-amber-700 hover:text-white border border-amber-200 hover:border-amber-600 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                        className="px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-600 text-amber-700 hover:text-white border border-amber-200 hover:border-amber-600 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
                         title="Edit Identitas Kolom"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                         <span>Edit</span>
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(col)}
-                      disabled={isDeleting}
-                      className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
-                    >
-                      {isDeleting ? (
-                        <div className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
-                      ) : (
-                        <Trash2 className="w-3.5 h-3.5" />
-                      )}
-                      <span>Hapus</span>
-                    </button>
+
+                    {isSpecificClassActive && isMultiClass ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(col, "class_only")}
+                          disabled={isDeleting}
+                          className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                          title={`Hapus kolom hanya untuk ${selectedClass}`}
+                        >
+                          {isDeleting ? (
+                            <div className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>Hapus ({selectedClass})</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(col, "all_classes")}
+                        disabled={isDeleting}
+                        className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                      >
+                        {isDeleting ? (
+                          <div className="w-3.5 h-3.5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>Hapus</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -253,3 +299,4 @@ export const DeleteColumnModal: React.FC<DeleteColumnModalProps> = ({
     </div>
   );
 };
+

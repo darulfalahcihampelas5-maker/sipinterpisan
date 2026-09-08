@@ -1,9 +1,7 @@
 import React, { useState } from "react";
 import {
   Network,
-  Share2,
   CheckCircle2,
-  AlertCircle,
   RotateCcw,
   Sparkles,
   Trophy,
@@ -28,44 +26,142 @@ interface GraphEdge {
   latency: number; // in ms
 }
 
+interface GraphMission {
+  id: number;
+  title: string;
+  subtitle: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  startNode: string;
+  targetNode: string;
+  optimalPath: string[];
+  optimalLatency: number;
+  conceptNote: string;
+}
+
+const GRAPH_MISSIONS: GraphMission[] = [
+  {
+    id: 1,
+    title: "Misi 1: Jaringan Lab Komputer Sekolah",
+    subtitle: "Peta Server Cloud Pusat -> Server Lab Sekolah",
+    nodes: [
+      { id: "A", name: "Server Cloud Pusat", role: "Start", x: 12, y: 50 },
+      { id: "B", name: "Router Transit Utara", role: "Node B", x: 38, y: 20 },
+      { id: "C", name: "Router Backbone Selatan", role: "Node C", x: 38, y: 80 },
+      { id: "D", name: "Gateway Distribusi", role: "Node D", x: 65, y: 35 },
+      { id: "E", name: "Edge Caching Regional", role: "Node E", x: 65, y: 75 },
+      { id: "F", name: "Server Lab Sekolah", role: "Target", x: 88, y: 50 },
+    ],
+    edges: [
+      { from: "A", to: "B", latency: 14 },
+      { from: "A", to: "C", latency: 6 },
+      { from: "B", to: "D", latency: 8 },
+      { from: "B", to: "F", latency: 25 },
+      { from: "C", to: "D", latency: 9 },
+      { from: "C", to: "E", latency: 7 },
+      { from: "D", to: "F", latency: 11 },
+      { from: "E", to: "F", latency: 16 },
+    ],
+    startNode: "A",
+    targetNode: "F",
+    optimalPath: ["A", "C", "D", "F"],
+    optimalLatency: 26,
+    conceptNote: "Peta jaringan menyaring merek router & kabel fisik, berfokus hanya pada simpul & latensi.",
+  },
+  {
+    id: 2,
+    title: "Misi 2: Ring Fiber Optik Antar Kota",
+    subtitle: "Pengiriman Data Dari Server Jakarta -> Surabaya",
+    nodes: [
+      { id: "J", name: "DC Jakarta Pusat", role: "Start", x: 12, y: 50 },
+      { id: "B", name: "Hub Bandung", role: "Node B", x: 35, y: 25 },
+      { id: "C", name: "Hub Cirebon", role: "Node C", x: 35, y: 75 },
+      { id: "S", name: "Hub Semarang", role: "Node S", x: 65, y: 35 },
+      { id: "Y", name: "Hub Yogyakarta", role: "Node Y", x: 65, y: 75 },
+      { id: "SUB", name: "DC Surabaya", role: "Target", x: 88, y: 50 },
+    ],
+    edges: [
+      { from: "J", to: "B", latency: 10 },
+      { from: "J", to: "C", latency: 18 },
+      { from: "B", to: "S", latency: 15 },
+      { from: "C", to: "Y", latency: 12 },
+      { from: "S", to: "SUB", latency: 14 },
+      { from: "Y", to: "SUB", latency: 20 },
+      { from: "B", to: "C", latency: 8 },
+      { from: "S", to: "Y", latency: 7 },
+    ],
+    startNode: "J",
+    targetNode: "SUB",
+    optimalPath: ["J", "B", "S", "SUB"],
+    optimalLatency: 39,
+    conceptNote: "Abstraksi memungkinkan insinyur memilih jaringan tercepat tanpa pusing melihat peta geografis riil.",
+  },
+  {
+    id: 3,
+    title: "Misi 3: Logistik Rute Kurir Koperasi Sekolah",
+    subtitle: "Rute Pengiriman Barang Dari Gudang -> Toko Sekolah",
+    nodes: [
+      { id: "G", name: "Gudang Utama", role: "Start", x: 12, y: 50 },
+      { id: "P1", name: "Pos Transit Utara", role: "Node P1", x: 38, y: 20 },
+      { id: "P2", name: "Pos Transit Barat", role: "Node P2", x: 38, y: 80 },
+      { id: "P3", name: "Pos Distribusi", role: "Node P3", x: 65, y: 50 },
+      { id: "T", name: "Kantin & Toko Sekolah", role: "Target", x: 88, y: 50 },
+    ],
+    edges: [
+      { from: "G", to: "P1", latency: 12 },
+      { from: "G", to: "P2", latency: 8 },
+      { from: "P1", to: "P3", latency: 10 },
+      { from: "P2", to: "P3", latency: 6 },
+      { from: "P3", to: "T", latency: 9 },
+      { from: "P1", to: "T", latency: 22 },
+    ],
+    startNode: "G",
+    targetNode: "T",
+    optimalPath: ["G", "P2", "P3", "T"],
+    optimalLatency: 23,
+    conceptNote: "Menggunakan abstraksi graf untuk meminimalkan durasi dan biaya bensin kurir.",
+  },
+  {
+    id: 4,
+    title: "Misi 4: Satelit Space & Edge Server Global",
+    subtitle: "Rute Sinyal Satelit Orbit -> Stasiun Earth Gateway",
+    nodes: [
+      { id: "SAT", name: "Satelit Orbit LEO", role: "Start", x: 12, y: 50 },
+      { id: "R1", name: "Relay Antariksa 1", role: "Node R1", x: 35, y: 20 },
+      { id: "R2", name: "Relay Antariksa 2", role: "Node R2", x: 35, y: 80 },
+      { id: "E1", name: "Ground Station A", role: "Node E1", x: 65, y: 35 },
+      { id: "E2", name: "Ground Station B", role: "Node E2", x: 65, y: 75 },
+      { id: "EARTH", name: "Data Center Pusat", role: "Target", x: 88, y: 50 },
+    ],
+    edges: [
+      { from: "SAT", to: "R1", latency: 25 },
+      { from: "SAT", to: "R2", latency: 20 },
+      { from: "R1", to: "E1", latency: 18 },
+      { from: "R2", to: "E2", latency: 30 },
+      { from: "R2", to: "E1", latency: 12 },
+      { from: "E1", to: "EARTH", latency: 10 },
+      { from: "E2", to: "EARTH", latency: 15 },
+    ],
+    startNode: "SAT",
+    targetNode: "EARTH",
+    optimalPath: ["SAT", "R2", "E1", "EARTH"],
+    optimalLatency: 42,
+    conceptNote: "Mengabaikan gravitasi & cuaca fisik, hanya memodelkan graf topologi transfer sinyal.",
+  },
+];
+
 interface GraphAbstractionSimulatorProps {
   onSuccessScore?: (score: number, stars: number) => void;
   isTeacherMode?: boolean;
 }
 
-const NODES: GraphNode[] = [
-  { id: "A", name: "Server Cloud Pusat", role: "Titik Awal (Start)", x: 12, y: 50 },
-  { id: "B", name: "Router Transit Utara", role: "Node B", x: 38, y: 20 },
-  { id: "C", name: "Router Backbone Selatan", role: "Node C", x: 38, y: 80 },
-  { id: "D", name: "Gateway Distribusi", role: "Node D", x: 65, y: 35 },
-  { id: "E", name: "Edge Caching Regional", role: "Node E", x: 65, y: 75 },
-  { id: "F", name: "Server Lab Sekolah", role: "Target Tujuan", x: 88, y: 50 },
-];
-
-const EDGES: GraphEdge[] = [
-  { from: "A", to: "B", latency: 14 },
-  { from: "A", to: "C", latency: 6 },
-  { from: "B", to: "D", latency: 8 },
-  { from: "B", to: "F", latency: 25 },
-  { from: "C", to: "D", latency: 9 },
-  { from: "C", to: "E", latency: 7 },
-  { from: "D", to: "F", latency: 11 },
-  { from: "E", to: "F", latency: 16 },
-];
-
-// Calculation:
-// Paths from A to F:
-// 1. A -> B -> F = 14 + 25 = 39ms
-// 2. A -> B -> D -> F = 14 + 8 + 11 = 33ms
-// 3. A -> C -> D -> F = 6 + 9 + 11 = 26ms (OPTIMAL!)
-// 4. A -> C -> E -> F = 6 + 7 + 16 = 29ms
-const OPTIMAL_PATH = ["A", "C", "D", "F"];
-const OPTIMAL_LATENCY = 26;
-
 export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps> = ({
   onSuccessScore,
 }) => {
-  const [selectedPath, setSelectedPath] = useState<string[]>(["A"]);
+  const [missionIdx, setMissionIdx] = useState(0);
+  const mission = GRAPH_MISSIONS[missionIdx];
+
+  const [selectedPath, setSelectedPath] = useState<string[]>([mission.startNode]);
   const [evaluated, setEvaluated] = useState<boolean>(false);
   const [score, setScore] = useState<number>(0);
   const [stars, setStars] = useState<number>(0);
@@ -73,12 +169,22 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
 
   const currentLastNode = selectedPath[selectedPath.length - 1];
 
-  // Find valid next adjacent nodes from current last node
+  const handleSwitchMission = (idx: number) => {
+    sound.playClick();
+    setMissionIdx(idx);
+    const newMission = GRAPH_MISSIONS[idx];
+    setSelectedPath([newMission.startNode]);
+    setEvaluated(false);
+    setMessage("");
+  };
+
   const getNextAvailableNodes = (nodeId: string): { to: string; latency: number }[] => {
-    return EDGES.filter((e) => e.from === nodeId && !selectedPath.includes(e.to)).map((e) => ({
-      to: e.to,
-      latency: e.latency,
-    }));
+    return mission.edges
+      .filter((e) => e.from === nodeId && !selectedPath.includes(e.to))
+      .map((e) => ({
+        to: e.to,
+        latency: e.latency,
+      }));
   };
 
   const handleSelectNode = (nodeId: string) => {
@@ -90,8 +196,7 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
     const newPath = [...selectedPath, nodeId];
     setSelectedPath(newPath);
 
-    // If reached target 'F', automatically trigger evaluation
-    if (nodeId === "F") {
+    if (nodeId === mission.targetNode) {
       evaluatePath(newPath);
     }
   };
@@ -101,7 +206,7 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
     for (let i = 0; i < path.length - 1; i++) {
       const from = path[i];
       const to = path[i + 1];
-      const edge = EDGES.find((e) => e.from === from && e.to === to);
+      const edge = mission.edges.find((e) => e.from === from && e.to === to);
       if (edge) total += edge.latency;
     }
     return total;
@@ -111,23 +216,23 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
     const totalLatency = calculateTotalLatency(path);
     setEvaluated(true);
 
-    if (totalLatency === OPTIMAL_LATENCY) {
+    if (totalLatency === mission.optimalLatency) {
       sound.playSuccess();
       setScore(100);
       setStars(3);
       setMessage(
-        "Sempurna! Kamu berhasil menemukan Rute Abstraksi Paling Optimal (Total Latensi 26 ms: A -> C -> D -> F). Algoritma routing internet bekerja persis dengan logika ini!"
+        `SEMPURNA! Rute Abstraksi Paling Optimal (${totalLatency} ms: ${path.join(" -> ")}). ${mission.conceptNote}`
       );
       if (onSuccessScore) onSuccessScore(100, 3);
     } else {
       sound.playCoin();
-      const diff = totalLatency - OPTIMAL_LATENCY;
+      const diff = totalLatency - mission.optimalLatency;
       const calcScore = Math.max(70, 100 - diff * 3);
       const starCount = calcScore >= 85 ? 2 : 1;
       setScore(calcScore);
       setStars(starCount);
       setMessage(
-        `Rute berhasil terhubung (${totalLatency} ms), namun masih ada jalur alternatif yang lebih cepat (${OPTIMAL_LATENCY} ms). Coba eksplorasi simpul lainnya!`
+        `Rute terhubung (${totalLatency} ms), tetapi ada rute lebih cepat (${mission.optimalLatency} ms). Coba eksplorasi simpul lain!`
       );
       if (onSuccessScore) onSuccessScore(calcScore, starCount);
     }
@@ -135,7 +240,7 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
 
   const handleReset = () => {
     sound.playClick();
-    setSelectedPath(["A"]);
+    setSelectedPath([mission.startNode]);
     setEvaluated(false);
     setMessage("");
   };
@@ -145,8 +250,8 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden flex flex-col">
-      {/* Banner */}
-      <div className="p-5 bg-gradient-to-r from-sky-900 via-indigo-950 to-slate-900 text-white flex flex-wrap items-center justify-between gap-4">
+      {/* Banner & Mission Switcher */}
+      <div className="p-5 bg-gradient-to-r from-sky-950 via-indigo-950 to-slate-900 text-white flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-2xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 shrink-0">
             <Network className="w-6 h-6" />
@@ -156,30 +261,35 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
               <span className="text-[10px] font-black uppercase tracking-wider bg-sky-500/30 text-sky-300 px-2 py-0.5 rounded-full border border-sky-500/40">
                 Pilar: Abstraksi & Graf
               </span>
-              <span className="text-xs text-slate-300">Level 2 Menengah</span>
+              <span className="text-xs text-slate-300">Lab Virtual Klasik</span>
             </div>
-            <h3 className="font-black text-lg text-white mt-0.5">
-              Simulasi Abstraksi Rute Jaringan Komputer (Dijkstra Mini)
-            </h3>
-            <p className="text-xs text-slate-300">
-              Pilihlah simpul jalur paket data dari Cloud Server (A) menuju Lab Sekolah (F) dengan latensi terkecil!
-            </p>
+            <h3 className="font-black text-lg text-white mt-0.5">{mission.title}</h3>
+            <p className="text-xs text-slate-300">{mission.subtitle}</p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleReset}
-          className="px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-2 cursor-pointer transition-all active:scale-95"
-        >
-          <RotateCcw className="w-4 h-4" />
-          <span>Reset Jalur</span>
-        </button>
+        {/* Mission Select Buttons */}
+        <div className="flex items-center gap-1.5 bg-slate-900/80 p-1.5 rounded-2xl border border-slate-800">
+          {GRAPH_MISSIONS.map((m, idx) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => handleSwitchMission(idx)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                missionIdx === idx
+                  ? "bg-sky-600 text-white shadow-md shadow-sky-600/30"
+                  : "text-slate-400 hover:text-white hover:bg-slate-800"
+              }`}
+            >
+              Misi {idx + 1}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Main Interactive Graph Canvas */}
       <div className="p-6 bg-slate-950 flex flex-col items-center justify-center relative min-h-[420px]">
-        {/* Subtle grid background */}
+        {/* Grid pattern background */}
         <div
           className="absolute inset-0 opacity-10 pointer-events-none"
           style={{
@@ -192,9 +302,9 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
 
         {/* SVG lines for edges */}
         <svg className="w-full h-80 max-w-3xl overflow-visible relative z-0">
-          {EDGES.map((edge) => {
-            const fromNode = NODES.find((n) => n.id === edge.from)!;
-            const toNode = NODES.find((n) => n.id === edge.to)!;
+          {mission.edges.map((edge) => {
+            const fromNode = mission.nodes.find((n) => n.id === edge.from)!;
+            const toNode = mission.nodes.find((n) => n.id === edge.to)!;
 
             const isEdgeInPath = selectedPath.some((nodeId, idx) => {
               if (idx < selectedPath.length - 1) {
@@ -206,7 +316,6 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
               return false;
             });
 
-            // calculate coordinates in % converted to viewBox 1000x400
             const x1 = fromNode.x * 10;
             const y1 = fromNode.y * 4;
             const x2 = toNode.x * 10;
@@ -226,7 +335,6 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
                   strokeDasharray={isEdgeInPath ? "none" : "4 4"}
                   className="transition-all duration-300"
                 />
-                {/* Latency badge on line */}
                 <rect
                   x={midX - 18}
                   y={midY - 12}
@@ -253,9 +361,9 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
           })}
         </svg>
 
-        {/* Nodes layer on top of SVG */}
+        {/* Nodes layer on top */}
         <div className="w-full max-w-3xl h-80 relative -mt-80 z-10 pointer-events-none">
-          {NODES.map((node) => {
+          {mission.nodes.map((node) => {
             const isSelected = selectedPath.includes(node.id);
             const isCurrent = currentLastNode === node.id;
             const isClickable = availableNext.some((a) => a.to === node.id);
@@ -285,8 +393,8 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
                   }`}
                 >
                   <span className="text-sm font-black">{node.id}</span>
-                  {node.id === "A" && <Server className="w-3.5 h-3.5 mt-0.5 text-emerald-300" />}
-                  {node.id === "F" && <Zap className="w-3.5 h-3.5 mt-0.5 text-amber-300" />}
+                  {node.id === mission.startNode && <Server className="w-3.5 h-3.5 mt-0.5 text-emerald-300" />}
+                  {node.id === mission.targetNode && <Zap className="w-3.5 h-3.5 mt-0.5 text-amber-300" />}
                 </button>
 
                 <span className="mt-1.5 text-[10px] font-bold text-slate-300 bg-slate-900/90 px-2 py-0.5 rounded-md border border-slate-800 whitespace-nowrap shadow-sm">
@@ -300,20 +408,18 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
 
       {/* Control & Latency Stats Bar */}
       <div className="p-5 bg-slate-50 border-t border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
           <div className="bg-white px-4 py-2.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-3">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Rute Aktif:
+              Rute:
             </span>
-            <div className="flex items-center gap-1.5 font-black text-sm text-slate-800">
+            <div className="flex items-center gap-1 font-black text-xs text-slate-800">
               {selectedPath.map((node, i) => (
                 <React.Fragment key={node}>
-                  <span className="w-6 h-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center text-xs">
+                  <span className="w-6 h-6 rounded-lg bg-sky-100 text-sky-800 flex items-center justify-center font-bold">
                     {node}
                   </span>
-                  {i < selectedPath.length - 1 && (
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                  )}
+                  {i < selectedPath.length - 1 && <ArrowRight className="w-3 h-3 text-slate-400" />}
                 </React.Fragment>
               ))}
             </div>
@@ -321,20 +427,24 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
 
           <div className="bg-white px-4 py-2.5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-2">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Akumulasi Latensi:
+              Latensi:
             </span>
-            <span className="text-lg font-black font-mono text-indigo-600">
-              {currentTotal} ms
-            </span>
+            <span className="text-lg font-black font-mono text-indigo-600">{currentTotal} ms</span>
           </div>
+
+          <button
+            type="button"
+            onClick={handleReset}
+            className="px-4 py-2.5 rounded-2xl bg-slate-800 text-slate-200 text-xs font-bold hover:bg-slate-700 flex items-center gap-1.5 cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Reset Rute
+          </button>
         </div>
 
         {/* Guidance / Status */}
         <div className="text-xs text-slate-600 flex items-center gap-2">
           {!evaluated ? (
-            <span>
-              Pilih simpul berkedip selanjutnya. Hubungkan hingga mencapai <b>Node F</b>!
-            </span>
+            <span>Hubungkan simpul hingga mencapai <b>Node {mission.targetNode}</b>!</span>
           ) : (
             <div className="flex items-center gap-2">
               <span className="font-bold text-emerald-700">Skor: {score} / 100</span>
@@ -351,7 +461,7 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
         </div>
       </div>
 
-      {/* Evaluation Feedback Alert */}
+      {/* Feedback Alert */}
       {evaluated && (
         <div
           className={`p-4 border-t flex items-start gap-3 ${
@@ -368,7 +478,7 @@ export const GraphAbstractionSimulator: React.FC<GraphAbstractionSimulatorProps>
           <div className="text-xs">
             <p className="font-bold">{message}</p>
             <p className="mt-1 text-slate-600">
-              <b>Mengapa ini Abstraksi?</b> Peta jaringan di atas mengabaikan panjang kabel serat optik bawah tanah dan jenis merek router fisik, hanya berfokus pada data esensial: hubungan simpul dan latensi waktu untuk menentukan rute optimal.
+              <b>Pelajaran Abstraksi:</b> Graf menyaring informasi yang tidak penting dan fokus pada data berbobot (latensi/jarak) untuk menentukan jalur tercepat.
             </p>
           </div>
         </div>

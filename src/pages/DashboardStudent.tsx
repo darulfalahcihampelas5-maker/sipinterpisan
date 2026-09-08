@@ -2167,7 +2167,7 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
   );
 
   const fetchAssignments = async () => {
-    const cacheKey = `firas_cache_assignments_${student?.nisn || 'guest'}`;
+    const cacheKey = `firas_cache_assignments_v2_${student?.nisn || 'guest'}`;
     const cached = getLocalCache<any[]>(cacheKey, 4 * 60 * 60 * 1000);
     if (cached) return cached;
 
@@ -2347,7 +2347,7 @@ _Laporan dikirim secara mandiri oleh Siswa untuk berbagi progres belajar. Terima
   );
 
   const fetchExams = async () => {
-    const cacheKey = `firas_cache_exams_${student?.nisn || 'guest'}`;
+    const cacheKey = `firas_cache_exams_v2_${student?.nisn || 'guest'}`;
     const cached = getLocalCache<any[]>(cacheKey, 4 * 60 * 60 * 1000);
     if (cached) return cached;
 

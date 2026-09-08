@@ -13,18 +13,20 @@ export const isAssignmentForClass = (asg: any, targetClass?: string): boolean =>
 
   // 1. Explicit targets array (highest priority for multi-class assignments)
   if (Array.isArray(asg.targets) && asg.targets.length > 0) {
-    return asg.targets.some((t: any) => {
+    const hasMatch = asg.targets.some((t: any) => {
       const k = (typeof t === "string" ? t : (t?.kelas || t?.name || "")).toString().trim().toLowerCase();
       return k === cleanTarget || k === "semua_kelas" || k === "all" || k === "semua kelas";
     });
+    if (hasMatch) return true;
   }
 
   // 2. targetClasses array
   if (Array.isArray(asg.targetClasses) && asg.targetClasses.length > 0) {
-    return asg.targetClasses.some((k: any) => {
+    const hasMatch = asg.targetClasses.some((k: any) => {
       const cls = (k || "").toString().trim().toLowerCase();
       return cls === cleanTarget || cls === "semua_kelas" || cls === "all" || cls === "semua kelas";
     });
+    if (hasMatch) return true;
   }
 
   // 3. kelasRef property
@@ -56,18 +58,20 @@ export const isExamForClass = (exam: any, targetClass?: string): boolean => {
 
   // 1. targetClasses array
   if (Array.isArray(exam.targetClasses) && exam.targetClasses.length > 0) {
-    return exam.targetClasses.some((k: any) => {
+    const hasMatch = exam.targetClasses.some((k: any) => {
       const cls = (k || "").toString().trim().toLowerCase();
       return cls === cleanTarget || cls === "semua_kelas" || cls === "all" || cls === "semua kelas";
     });
+    if (hasMatch) return true;
   }
 
   // 2. Explicit targets array
   if (Array.isArray(exam.targets) && exam.targets.length > 0) {
-    return exam.targets.some((t: any) => {
+    const hasMatch = exam.targets.some((t: any) => {
       const k = (typeof t === "string" ? t : (t?.kelas || t?.name || "")).toString().trim().toLowerCase();
       return k === cleanTarget || k === "semua_kelas" || k === "all" || k === "semua kelas";
     });
+    if (hasMatch) return true;
   }
 
   // 3. kelasRef property

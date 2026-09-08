@@ -24,6 +24,8 @@ import { SIMULATION_LEVELS, LevelConfig, LevelDifficulty } from "./simulationDat
 import { GridRoverSimulator } from "./GridRoverSimulator";
 import { GraphAbstractionSimulator } from "./GraphAbstractionSimulator";
 import { SortingDecompositionSimulator } from "./SortingDecompositionSimulator";
+import { LogicGatePatternSimulator } from "./LogicGatePatternSimulator";
+import { FlowchartDecomposerSimulator } from "./FlowchartDecomposerSimulator";
 import { QuizInteractive } from "./QuizInteractive";
 import { ModuleViewer } from "./ModuleViewer";
 import { sound } from "./soundEffects";
@@ -51,6 +53,7 @@ export const ComputationalThinkingSimulation: React.FC<ComputationalThinkingSimu
 }) => {
   const [selectedLevelId, setSelectedLevelId] = useState<LevelDifficulty>("pemula");
   const [activeTab, setActiveTab] = useState<"daily_life" | "classic_sim" | "modul" | "kuis" | "raport" | "teacher_mgmt">("daily_life");
+  const [classicGameTab, setClassicGameTab] = useState<"rover" | "graph" | "sorting" | "logic" | "flowchart">("rover");
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
   // Storage key based on NISN or default
@@ -194,87 +197,23 @@ export const ComputationalThinkingSimulation: React.FC<ComputationalThinkingSimu
           </div>
         </div>
 
-        {/* Level Selector Tabs */}
-        <div className="relative z-10 mt-6 pt-6 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-3">
-          {SIMULATION_LEVELS.map((lvl) => {
-            const isSelected = selectedLevelId === lvl.id;
-            const lvlProgress = progress.scores[lvl.id];
-            const avgScore = Math.round((lvlProgress.simScore + lvlProgress.quizScore) / 2);
-
-            return (
-              <button
-                key={lvl.id}
-                type="button"
-                onClick={() => {
-                  sound.playClick();
-                  setSelectedLevelId(lvl.id);
-                }}
-                className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
-                  isSelected
-                    ? "bg-slate-800 border-emerald-400/80 shadow-lg shadow-emerald-500/10 ring-2 ring-emerald-500/30"
-                    : "bg-slate-900/60 border-slate-800 hover:bg-slate-800/50 text-slate-400"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span
-                    className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
-                      lvl.id === "pemula"
-                        ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                        : lvl.id === "menengah"
-                        ? "bg-sky-500/20 text-sky-300 border-sky-500/40"
-                        : "bg-purple-500/20 text-purple-300 border-purple-500/40"
-                    }`}
-                  >
-                    {lvl.difficultyBadge}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {[1, 2, 3].map((s) => (
-                      <Sparkles
-                        key={s}
-                        className={`w-3 h-3 ${
-                          s <= lvlProgress.stars ? "text-amber-400 fill-amber-400" : "text-slate-600"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <h3 className={`font-black text-sm ${isSelected ? "text-white" : "text-slate-300"}`}>
-                  {lvl.title}
-                </h3>
-                <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{lvl.subtitle}</p>
-
-                <div className="mt-2.5 flex items-center justify-between text-[10px] font-bold text-slate-400">
-                  <span>Sim: {lvlProgress.simScore}</span>
-                  <span>Kuis: {lvlProgress.quizScore}</span>
-                  <span className={lvlProgress.passed ? "text-emerald-400" : "text-slate-500"}>
-                    {lvlProgress.passed ? "✓ Lulus" : "Belum Lulus"}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Sub-Navigation Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm">
-        <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+        {/* Navigation Tabs are now here at the top */}
+        <div className="relative z-10 mt-6 pt-6 border-t border-slate-800 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => {
               sound.playClick();
               setActiveTab("daily_life");
             }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
               activeTab === "daily_life"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                ? "bg-emerald-600 text-white border-emerald-500 shadow-md shadow-emerald-600/20"
+                : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
             }`}
           >
-            <Boxes className="w-4 h-4 text-amber-300" />
+            <Boxes className="w-4 h-4 text-emerald-300" />
             <span>40 Simulator Siswa (10/Pilar)</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-white/20 font-black">
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/20 font-black text-emerald-100">
               40 Level
             </span>
           </button>
@@ -285,14 +224,14 @@ export const ComputationalThinkingSimulation: React.FC<ComputationalThinkingSimu
               sound.playClick();
               setActiveTab("classic_sim");
             }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
               activeTab === "classic_sim"
-                ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                ? "bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/20"
+                : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
             }`}
           >
             <Gamepad2 className="w-4 h-4" />
-            <span>Lab Virtual Klasik (Rover/Graf)</span>
+            <span>Lab Virtual Klasik</span>
           </button>
 
           <button
@@ -301,14 +240,14 @@ export const ComputationalThinkingSimulation: React.FC<ComputationalThinkingSimu
               sound.playClick();
               setActiveTab("modul");
             }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
               activeTab === "modul"
-                ? "bg-sky-600 text-white shadow-md shadow-sky-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                ? "bg-sky-600 text-white border-sky-500 shadow-md shadow-sky-600/20"
+                : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
             }`}
           >
             <BookOpen className="w-4 h-4" />
-            <span>Modul Penjelasan Materi</span>
+            <span>Modul Materi</span>
           </button>
 
           <button
@@ -317,14 +256,14 @@ export const ComputationalThinkingSimulation: React.FC<ComputationalThinkingSimu
               sound.playClick();
               setActiveTab("kuis");
             }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
               activeTab === "kuis"
-                ? "bg-amber-600 text-white shadow-md shadow-amber-600/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                ? "bg-amber-600 text-white border-amber-500 shadow-md shadow-amber-600/20"
+                : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
             }`}
           >
             <HelpCircle className="w-4 h-4" />
-            <span>Kuis Interaktif ({currentLevel.quizQuestions.length} Soal)</span>
+            <span>Kuis Interaktif</span>
           </button>
 
           <button
@@ -333,14 +272,14 @@ export const ComputationalThinkingSimulation: React.FC<ComputationalThinkingSimu
               sound.playClick();
               setActiveTab("raport");
             }}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
               activeTab === "raport"
-                ? "bg-slate-900 text-white shadow-md shadow-slate-900/20"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                ? "bg-slate-900 text-white border-slate-700 shadow-md shadow-slate-900/20"
+                : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
             }`}
           >
-            <Trophy className="w-4 h-4" />
-            <span>Raport & Sertifikat Nilai</span>
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <span>Raport Nilai</span>
           </button>
 
           {userRole === "teacher" && (
@@ -350,27 +289,74 @@ export const ComputationalThinkingSimulation: React.FC<ComputationalThinkingSimu
                 sound.playClick();
                 setActiveTab("teacher_mgmt");
               }}
-              className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer border ${
+              className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer border ml-auto ${
                 activeTab === "teacher_mgmt"
-                  ? "bg-rose-600 text-white border-rose-700 shadow-md shadow-rose-600/20"
-                  : "bg-rose-50 text-rose-800 border-rose-200 hover:bg-rose-100"
+                  ? "bg-rose-600 text-white border-rose-500 shadow-md shadow-rose-600/20"
+                  : "bg-rose-950 text-rose-300 border-rose-800 hover:bg-rose-900"
               }`}
             >
-              <Users className="w-4 h-4 text-rose-600" />
-              <span>Menu Guru: Reset Siswa & Kunci Jawaban</span>
+              <Users className="w-4 h-4 text-rose-400" />
+              <span>Menu Guru</span>
             </button>
           )}
-        </div>
-
-        {/* Current status pill */}
-        <div className="hidden xl:flex items-center gap-2 px-3 text-xs text-slate-500">
-          <span>Tingkat Aktif:</span>
-          <b className="text-slate-800">{currentLevel.difficultyBadge}</b>
         </div>
       </div>
 
       {/* Main Tab Panels */}
       <div>
+        {/* Render classical level selectors ONLY if not on daily_life and not on teacher_mgmt */}
+        {activeTab !== "daily_life" && activeTab !== "teacher_mgmt" && (
+          <div className="mb-6 relative z-10 grid grid-cols-1 md:grid-cols-3 gap-3">
+            {SIMULATION_LEVELS.map((lvl) => {
+              const isSelected = selectedLevelId === lvl.id;
+              const lvlProgress = progress.scores[lvl.id];
+
+              return (
+                <button
+                  key={lvl.id}
+                  type="button"
+                  onClick={() => {
+                    sound.playClick();
+                    setSelectedLevelId(lvl.id);
+                  }}
+                  className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-slate-800 border-emerald-400/80 shadow-lg shadow-emerald-500/10 ring-2 ring-emerald-500/30"
+                      : "bg-white border-slate-200 hover:bg-slate-50 text-slate-600"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span
+                      className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border ${
+                        lvl.id === "pemula"
+                          ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                          : lvl.id === "menengah"
+                          ? "bg-sky-100 text-sky-700 border-sky-200"
+                          : "bg-purple-100 text-purple-700 border-purple-200"
+                      }`}
+                    >
+                      {lvl.difficultyBadge}
+                    </span>
+                  </div>
+
+                  <h3 className={`font-black text-sm ${isSelected ? "text-white" : "text-slate-800"}`}>
+                    {lvl.title}
+                  </h3>
+                  <p className={`text-[11px] line-clamp-1 mt-0.5 ${isSelected ? "text-slate-400" : "text-slate-500"}`}>{lvl.subtitle}</p>
+
+                  <div className={`mt-2.5 flex items-center justify-between text-[10px] font-bold ${isSelected ? "text-slate-300" : "text-slate-500"}`}>
+                    <span>Sim: {lvlProgress.simScore}</span>
+                    <span>Kuis: {lvlProgress.quizScore}</span>
+                    <span className={lvlProgress.passed ? "text-emerald-500" : ""}>
+                      {lvlProgress.passed ? "✓ Lulus" : "Belum Lulus"}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* 0. Teacher Management View: Reset Siswa & Kunci Jawaban Lengkap 40 Kasus */}
         {activeTab === "teacher_mgmt" && userRole === "teacher" && (
           <TeacherSimulationView
@@ -388,31 +374,125 @@ export const ComputationalThinkingSimulation: React.FC<ComputationalThinkingSimu
           />
         )}
 
-        {/* 2. Classical Virtual Lab Simulators (Rover, Graph, Sorting) */}
+        {/* 2. Classical Virtual Lab Simulators (5 Games & Multi-Missions) */}
         {activeTab === "classic_sim" && (
-          <div className="space-y-4">
-            <div className="bg-slate-100 p-3 rounded-xl text-xs text-slate-600 flex items-center justify-between">
-              <span>
-                Sedang memainkan Lab Virtual: <strong>{currentLevel.title}</strong>
+          <div className="space-y-6">
+            {/* Game Selection Sub-Bar */}
+            <div className="bg-slate-900 text-white p-3.5 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+              <span className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
+                <Gamepad2 className="w-4 h-4 text-amber-400" /> pilih Game Lab Virtual Klasik:
               </span>
-              <span className="font-semibold text-slate-700">
-                Pilih tingkat kesulitan di banner atas untuk berganti lab
-              </span>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    sound.playClick();
+                    setClassicGameTab("rover");
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                    classicGameTab === "rover"
+                      ? "bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30 font-black"
+                      : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                  }`}
+                >
+                  <Bot className="w-3.5 h-3.5 text-amber-300" />
+                  <span>1. Grid Rover (6 Misi)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    sound.playClick();
+                    setClassicGameTab("graph");
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                    classicGameTab === "graph"
+                      ? "bg-sky-600 text-white border-sky-400 shadow-md shadow-sky-600/30 font-black"
+                      : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                  }`}
+                >
+                  <Network className="w-3.5 h-3.5 text-sky-300" />
+                  <span>2. Topologi Graf (4 Misi)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    sound.playClick();
+                    setClassicGameTab("sorting");
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                    classicGameTab === "sorting"
+                      ? "bg-emerald-600 text-white border-emerald-400 shadow-md shadow-emerald-600/30 font-black"
+                      : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                  }`}
+                >
+                  <Brain className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>3. Sorting & Search</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    sound.playClick();
+                    setClassicGameTab("logic");
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                    classicGameTab === "logic"
+                      ? "bg-purple-600 text-white border-purple-400 shadow-md shadow-purple-600/30 font-black"
+                      : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-purple-300" />
+                  <span>4. Gerbang Logika (4 Misi BARU)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    sound.playClick();
+                    setClassicGameTab("flowchart");
+                  }}
+                  className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+                    classicGameTab === "flowchart"
+                      ? "bg-teal-600 text-white border-teal-400 shadow-md shadow-teal-600/30 font-black"
+                      : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
+                  }`}
+                >
+                  <Boxes className="w-3.5 h-3.5 text-teal-300" />
+                  <span>5. Flowchart Sistem (3 Misi BARU)</span>
+                </button>
+              </div>
             </div>
-            {currentLevel.simulatorType === "rover" && (
+
+            {/* Render Active Game */}
+            {classicGameTab === "rover" && (
               <GridRoverSimulator
                 onSuccessScore={handleSimulatorScore}
                 isTeacherMode={userRole === "teacher"}
               />
             )}
-            {currentLevel.simulatorType === "graph" && (
+            {classicGameTab === "graph" && (
               <GraphAbstractionSimulator
                 onSuccessScore={handleSimulatorScore}
                 isTeacherMode={userRole === "teacher"}
               />
             )}
-            {currentLevel.simulatorType === "sorting" && (
+            {classicGameTab === "sorting" && (
               <SortingDecompositionSimulator
+                onSuccessScore={handleSimulatorScore}
+                isTeacherMode={userRole === "teacher"}
+              />
+            )}
+            {classicGameTab === "logic" && (
+              <LogicGatePatternSimulator
+                onSuccessScore={handleSimulatorScore}
+                isTeacherMode={userRole === "teacher"}
+              />
+            )}
+            {classicGameTab === "flowchart" && (
+              <FlowchartDecomposerSimulator
                 onSuccessScore={handleSimulatorScore}
                 isTeacherMode={userRole === "teacher"}
               />

@@ -1,21 +1,20 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { initializeFirestore, collection, getDocs, query, where } from 'firebase/firestore';
-import { readFileSync } from 'fs';
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getFirestore } = require('firebase-admin/firestore');
+const serviceAccount = require('./service-account.json');
 
-const firebaseConfig = JSON.parse(readFileSync('./firebase-applet-config.json', 'utf8'));
-const app = initializeApp(firebaseConfig);
-const db = initializeFirestore(app, {}, firebaseConfig.firestoreDatabaseId);
+initializeApp({
+  credential: cert(serviceAccount)
+});
 
-async function test() {
-  try {
-    const studentsRef = collection(db, "studentsByNisn");
-    const qSnap = await getDocs(studentsRef);
-    console.log("Success! Docs:", qSnap.size);
-    process.exit(0);
-  } catch (e) {
-    console.error("Error:", e.message);
-    process.exit(1);
-  }
-}
-test();
+const db = getFirestore();
+db.collection('assignments').get().then(snapshot => {
+  snapshot.forEach(doc => {
+    const data = doc.data();
+    console.log(`ID: ${doc.id}`);
+    console.log(`Title: ${data.title}`);
+    console.log(`Kelas: ${data.kelas}`);
+    console.log(`TargetClasses:`, data.targetClasses);
+    console.log(`Targets:`, data.targets);
+    console.log('---');
+  });
+}).catch(console.error);

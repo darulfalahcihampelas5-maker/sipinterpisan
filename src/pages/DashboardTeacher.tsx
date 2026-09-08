@@ -908,7 +908,7 @@ export default function DashboardTeacher() {
     setAssignmentDesc("");
     setAssignmentTaskLink("");
     setEditingAssignmentId(null);
-      localStorage.removeItem("firas_cache_assignments");
+      localStorage.removeItem("firas_cache_assignments_v2");
       fetchTeacherData(false);
     setAssignmentMessage({ text: "", type: "" });
   };
@@ -1469,7 +1469,7 @@ export default function DashboardTeacher() {
       }
 
       // 3. Assignments (rarely changes, always cache first unless missing or forceRefresh)
-      const cachedAssignments = !forceRefresh && getLocalCache<any[]>("firas_cache_assignments", 12 * 60 * 60 * 1000);
+      const cachedAssignments = null; // ALWAYS FETCH
       if (cachedAssignments && cachedAssignments.length > 0) {
         setAssignmentsList(cachedAssignments);
       } else {
@@ -1484,7 +1484,7 @@ export default function DashboardTeacher() {
           });
           if (tasks.length > 0) {
             setAssignmentsList(tasks);
-            setLocalCache("firas_cache_assignments", tasks);
+            setLocalCache("firas_cache_assignments_v2", tasks);
           }
         } catch (e) {
           console.warn("Failed fetching assignments:", e);
@@ -1570,7 +1570,7 @@ export default function DashboardTeacher() {
       }
 
       // 7. Exams (Static, always cache first unless forceRefresh)
-      const cachedExams = !forceRefresh && getLocalCache<any[]>("firas_cache_exams", 12 * 60 * 60 * 1000);
+      const cachedExams = null; // ALWAYS FETCH
       if (cachedExams && cachedExams.length > 0) {
         setExamsList(cachedExams);
       } else {
@@ -1585,7 +1585,7 @@ export default function DashboardTeacher() {
           });
           if (exams.length > 0) {
             setExamsList(exams);
-            setLocalCache("firas_cache_exams", exams);
+            setLocalCache("firas_cache_exams_v2", exams);
           }
         } catch (e) {
           console.warn("Failed fetching exams:", e);
@@ -1734,7 +1734,7 @@ export default function DashboardTeacher() {
             { merge: true },
           );
           showAlert("Berhasil", "Tugas berhasil diarsipkan!", "alert");
-          localStorage.removeItem("firas_cache_assignments");
+          localStorage.removeItem("firas_cache_assignments_v2");
           fetchTeacherData(false);
         } catch (error: any) {
           console.warn("Archive error:", error);
@@ -1995,7 +1995,7 @@ export default function DashboardTeacher() {
 
         const updatedExams = [newExamDoc, ...examsList];
         setExamsList(updatedExams);
-        setLocalCache("firas_cache_exams", updatedExams);
+        setLocalCache("firas_cache_exams_v2", updatedExams);
       } else {
         const newAssignmentId = `TGS-MANUAL-${Date.now()}`;
         const newDoc = {
@@ -2027,7 +2027,7 @@ export default function DashboardTeacher() {
 
         const updatedAssignments = [newDoc, ...assignmentsList];
         setAssignmentsList(updatedAssignments);
-        setLocalCache("firas_cache_assignments", updatedAssignments);
+        setLocalCache("firas_cache_assignments_v2", updatedAssignments);
       }
 
       setIsAddManualColumnOpen(false);
@@ -2054,55 +2054,165 @@ export default function DashboardTeacher() {
   const handlePromptDeleteRekapColumn = (
     colId: string,
     colTitle: string,
-    colType: "assignment" | "exam"
+    colType: "assignment" | "exam",
+    scope?: "class_only" | "all_classes"
   ) => {
     const typeLabel = colType === "exam" ? "CBT" : "Tugas";
-    showConfirm(
-      `Hapus Kolom ${typeLabel}`,
-      `Apakah Anda yakin ingin menghapus kolom nilai ${typeLabel} "${colTitle}"? Kolom ini akan dihapus dari Buku Nilai dan seluruh data nilai siswa terkait akan dibersihkan.`,
-      async () => {
-        try {
-          if (colType === "exam") {
-            await deleteDoc(doc(db, "exams", colId));
-            const updatedExams = examsList.filter((e) => e.id !== colId);
-            setExamsList(updatedExams);
-            setLocalCache("firas_cache_exams", updatedExams);
-          } else {
-            await deleteDoc(doc(db, "assignments", colId));
-            const updatedAssignments = assignmentsList.filter((a) => a.id !== colId);
-            setAssignmentsList(updatedAssignments);
-            setLocalCache("firas_cache_assignments", updatedAssignments);
-          }
+    const currentClass = selectedClassFilter?.trim();
+    const isFilteredBySpecificClass =
+      !!currentClass &&
+      currentClass !== "SEMUA_KELAS" &&
+      currentClass !== "ALL" &&
+      currentClass !== "Semua Kelas";
 
-          // Clean up final_grades in memory and cache
-          const updatedFinalGrades = finalGradesList.filter(
-            (g) => g.assignmentId !== colId && g.id !== colId
-          );
-          setFinalGradesList(updatedFinalGrades);
-          setLocalCache("firas_cache_final_grades", updatedFinalGrades);
+    // Find the item
+    const existingItem =
+      colType === "exam"
+        ? examsList.find((e) => e.id === colId)
+        : assignmentsList.find((a) => a.id === colId);
 
-          // Also clean up submissions in memory and cache
-          const updatedSubmissions = submissionsList.filter(
-            (s) => s.assignmentId !== colId
-          );
-          setSubmissionsList(updatedSubmissions);
-          setLocalCache("firas_cache_submissions", updatedSubmissions);
-
-          showAlert(
-            "Berhasil Dihapus",
-            `Kolom ${typeLabel} "${colTitle}" beserta seluruh nilai terkait berhasil dihapus dari Buku Nilai!`,
-            "alert"
-          );
-        } catch (err: any) {
-          console.warn("Gagal menghapus kolom:", err);
-          showAlert(
-            "Gagal",
-            "Terjadi kesalahan saat menghapus kolom: " + (err.message || err),
-            "danger"
-          );
-        }
+    // Determine current target classes
+    let currentClasses: string[] = [];
+    if (existingItem?.targetClasses && Array.isArray(existingItem.targetClasses) && existingItem.targetClasses.length > 0) {
+      currentClasses = existingItem.targetClasses.map((c: any) => c.toString().trim()).filter(Boolean);
+    } else if (existingItem?.targets && Array.isArray(existingItem.targets) && existingItem.targets.length > 0) {
+      currentClasses = existingItem.targets
+        .map((t: any) => (typeof t === "string" ? t : (t?.kelas || t?.name || "")).toString().trim())
+        .filter(Boolean);
+    } else if (existingItem?.kelas && existingItem.kelas.toString().trim()) {
+      const rawK = existingItem.kelas.toString().trim();
+      if (rawK.toLowerCase() === "semua_kelas" || rawK.toLowerCase() === "all" || rawK.toLowerCase() === "semua kelas") {
+        currentClasses = classesList.map((c: any) => c.name?.trim()).filter(Boolean);
+      } else {
+        currentClasses = rawK.split(",").map((s: string) => s.trim()).filter(Boolean);
       }
-    );
+    } else {
+      // Default to all school classes
+      currentClasses = classesList.map((c: any) => c.name?.trim()).filter(Boolean);
+    }
+
+    // Deduplicate current classes
+    currentClasses = Array.from(new Set(currentClasses));
+
+    // Determine if deleting for this specific class only or for all classes
+    const shouldDeleteOnlyForClass =
+      scope === "class_only" ||
+      (scope !== "all_classes" && isFilteredBySpecificClass && currentClasses.length > 1);
+
+    if (shouldDeleteOnlyForClass && isFilteredBySpecificClass) {
+      const remainingClasses = currentClasses.filter(
+        (c) => c.toLowerCase() !== currentClass.toLowerCase()
+      );
+      const remainingPreview =
+        remainingClasses.slice(0, 4).join(", ") +
+        (remainingClasses.length > 4 ? ` (+${remainingClasses.length - 4} kelas)` : "");
+
+      showConfirm(
+        `Hapus Kolom untuk Kelas ${currentClass}`,
+        `Apakah Anda yakin ingin menghapus kolom ${typeLabel} "${colTitle}" KHUSUS untuk Kelas ${currentClass}?\n\n• Kolom ini HANYA akan dihapus dari Kelas ${currentClass}.\n• Kolom dan nilai di kelas lain (${remainingPreview || "kelas lain"}) TETAP AMAN dan TIDAK akan terhapus.`,
+        async () => {
+          try {
+            const updatedDocData: any = {
+              targetClasses: remainingClasses,
+              kelas: remainingClasses.join(", "),
+              kelasRef: remainingClasses[0] || "",
+              updatedAt: new Date().toISOString(),
+            };
+
+            if (existingItem?.targets && Array.isArray(existingItem.targets)) {
+              updatedDocData.targets = existingItem.targets.filter((t: any) => {
+                const k = (typeof t === "string" ? t : (t?.kelas || t?.name || "")).toString().trim().toLowerCase();
+                return k !== currentClass.toLowerCase();
+              });
+            }
+
+            const docRef = doc(db, colType === "exam" ? "exams" : "assignments", colId);
+            await updateDoc(docRef, updatedDocData);
+
+            // Update in-memory state
+            if (colType === "exam") {
+              const updatedExams = examsList.map((e) =>
+                e.id === colId ? { ...e, ...updatedDocData } : e
+              );
+              setExamsList(updatedExams);
+              setLocalCache("firas_cache_exams_v2", updatedExams);
+            } else {
+              const updatedAssignments = assignmentsList.map((a) =>
+                a.id === colId ? { ...a, ...updatedDocData } : a
+              );
+              setAssignmentsList(updatedAssignments);
+              setLocalCache("firas_cache_assignments_v2", updatedAssignments);
+            }
+
+            showAlert(
+              "Berhasil Dihapus dari Kelas",
+              `Kolom ${typeLabel} "${colTitle}" berhasil dihapus dari Kelas ${currentClass}. Kolom di kelas lain tetap aman tersimpan!`,
+              "alert"
+            );
+          } catch (err: any) {
+            console.warn("Gagal memperbarui kolom kelas:", err);
+            showAlert(
+              "Gagal",
+              "Terjadi kesalahan saat menghapus kolom dari kelas: " + (err.message || err),
+              "danger"
+            );
+          }
+        }
+      );
+    } else {
+      // Deleting for ALL classes (or this was the only class)
+      const warningText =
+        isFilteredBySpecificClass && currentClasses.length <= 1
+          ? `Kolom ${typeLabel} "${colTitle}" hanya terdaftar untuk Kelas ${currentClass}. Menghapusnya akan menghapus penilaian ini secara permanen dari sistem.`
+          : `Apakah Anda yakin ingin menghapus kolom nilai ${typeLabel} "${colTitle}" untuk SEMUA KELAS?\n\nKolom ini akan dihapus permanen dari Buku Nilai seluruh kelas beserta seluruh riwayat nilai terkait.`;
+
+      showConfirm(
+        `Hapus Kolom ${typeLabel} (Semua Kelas)`,
+        warningText,
+        async () => {
+          try {
+            if (colType === "exam") {
+              await deleteDoc(doc(db, "exams", colId));
+              const updatedExams = examsList.filter((e) => e.id !== colId);
+              setExamsList(updatedExams);
+              setLocalCache("firas_cache_exams_v2", updatedExams);
+            } else {
+              await deleteDoc(doc(db, "assignments", colId));
+              const updatedAssignments = assignmentsList.filter((a) => a.id !== colId);
+              setAssignmentsList(updatedAssignments);
+              setLocalCache("firas_cache_assignments_v2", updatedAssignments);
+            }
+
+            // Clean up final_grades in memory and cache
+            const updatedFinalGrades = finalGradesList.filter(
+              (g) => g.assignmentId !== colId && g.id !== colId
+            );
+            setFinalGradesList(updatedFinalGrades);
+            setLocalCache("firas_cache_final_grades", updatedFinalGrades);
+
+            // Also clean up submissions in memory and cache
+            const updatedSubmissions = submissionsList.filter(
+              (s) => s.assignmentId !== colId
+            );
+            setSubmissionsList(updatedSubmissions);
+            setLocalCache("firas_cache_submissions", updatedSubmissions);
+
+            showAlert(
+              "Berhasil Dihapus",
+              `Kolom ${typeLabel} "${colTitle}" berhasil dihapus secara permanen dari sistem.`,
+              "alert"
+            );
+          } catch (err: any) {
+            console.warn("Gagal menghapus kolom:", err);
+            showAlert(
+              "Gagal",
+              "Terjadi kesalahan saat menghapus kolom: " + (err.message || err),
+              "danger"
+            );
+          }
+        }
+      );
+    }
   };
 
   const handleOpenEditColumnModal = (col?: any) => {
@@ -2146,7 +2256,7 @@ export default function DashboardTeacher() {
           await setDoc(doc(db, "exams", id), updatedExam);
           const newExamsList = examsList.map((e) => (e.id === id ? updatedExam : e));
           setExamsList(newExamsList);
-          setLocalCache("firas_cache_exams", newExamsList);
+          setLocalCache("firas_cache_exams_v2", newExamsList);
         } else {
           const existingAssign = assignmentsList.find((a) => a.id === id) || {};
           const updatedAssign = {
@@ -2174,7 +2284,7 @@ export default function DashboardTeacher() {
           await setDoc(doc(db, "assignments", id), updatedAssign);
           const newAssignList = assignmentsList.map((a) => (a.id === id ? updatedAssign : a));
           setAssignmentsList(newAssignList);
-          setLocalCache("firas_cache_assignments", newAssignList);
+          setLocalCache("firas_cache_assignments_v2", newAssignList);
         }
       } else {
         // Changed type between Tugas and CBT
@@ -2210,8 +2320,8 @@ export default function DashboardTeacher() {
           const newExamsList = [newExamDoc, ...examsList.filter((e) => e.id !== id)];
           setAssignmentsList(newAssignList);
           setExamsList(newExamsList);
-          setLocalCache("firas_cache_assignments", newAssignList);
-          setLocalCache("firas_cache_exams", newExamsList);
+          setLocalCache("firas_cache_assignments_v2", newAssignList);
+          setLocalCache("firas_cache_exams_v2", newExamsList);
         } else if (type === "Tugas" && originalType === "CBT") {
           const existingExam = examsList.find((e) => e.id === id) || {};
           const newAssignDoc = {
@@ -2246,8 +2356,8 @@ export default function DashboardTeacher() {
           const newAssignList = [newAssignDoc, ...assignmentsList.filter((a) => a.id !== id)];
           setExamsList(newExamsList);
           setAssignmentsList(newAssignList);
-          setLocalCache("firas_cache_exams", newExamsList);
-          setLocalCache("firas_cache_assignments", newAssignList);
+          setLocalCache("firas_cache_exams_v2", newExamsList);
+          setLocalCache("firas_cache_assignments_v2", newAssignList);
         }
       }
 
@@ -4651,7 +4761,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
       });
 
       showAlert("Berhasil", `Ujian online berhasil diterbitkan untuk kelas (${kelasRefVal}). Token ujian Anda adalah: ${examToken.toUpperCase()}`, "alert");
-      localStorage.removeItem("firas_cache_exams");
+      localStorage.removeItem("firas_cache_exams_v2");
       fetchTeacherData(false);
 
       // Reset form
@@ -4713,7 +4823,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
         });
       }
 
-      localStorage.removeItem("firas_cache_exams");
+      localStorage.removeItem("firas_cache_exams_v2");
       fetchTeacherData(false);
 
       const publishedExam = examToPublish;
@@ -4809,7 +4919,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
         try {
           await deleteDoc(doc(db, "exams", id));
           showAlert("Ujian Dihapus", "Ujian online telah dihapus dari database sekolah.", "alert");
-          localStorage.removeItem("firas_cache_exams");
+          localStorage.removeItem("firas_cache_exams_v2");
           fetchTeacherData(false);
         } catch (error) {
           handleFirestoreError(error, OperationType.DELETE, `exams/${id}`);
@@ -7927,8 +8037,25 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                       Nilai Kehadiran
                                     </th>
                                     {(() => {
-const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a, selectedClassFilter));
-                                      const filteredExams = examsList.filter((e) => isExamForClass(e, selectedClassFilter));
+                                      const isTargetedClass = (item: any, target: string) => {
+                                        if (!item) return false;
+                                        if (!target || target === "SEMUA_KELAS" || target === "ALL" || target.trim() === "") return true;
+                                        const cleanTarget = target.trim().toLowerCase();
+                                        if (Array.isArray(item.targets) && item.targets.some((t: any) => {
+                                          const k = (typeof t === "string" ? t : (t?.kelas || t?.name || "")).toString().trim().toLowerCase();
+                                          return k === cleanTarget || k === "semua_kelas" || k === "all" || k === "semua kelas";
+                                        })) return true;
+                                        if (Array.isArray(item.targetClasses) && item.targetClasses.some((k: any) => {
+                                          const cls = (k || "").toString().trim().toLowerCase();
+                                          return cls === cleanTarget || cls === "semua_kelas" || cls === "all" || cls === "semua kelas";
+                                        })) return true;
+                                        if (item.kelasRef && item.kelasRef.toString().toLowerCase().split(",").map((s:string)=>s.trim()).includes(cleanTarget)) return true;
+                                        if (item.kelas && item.kelas.toString().toLowerCase().split(",").map((s:string)=>s.trim()).includes(cleanTarget)) return true;
+                                        return false;
+                                      };
+
+                                      const filteredAssignments = assignmentsList.filter((a) => isTargetedClass(a, selectedClassFilter));
+                                      const filteredExams = examsList.filter((e) => isTargetedClass(e, selectedClassFilter));
 
                                       const mergedCols = [
                                         ...filteredAssignments.map((a) => ({
@@ -8094,9 +8221,26 @@ const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a
                                             })()}
                                           </td>
                                           {(() => {
-const targetCls = selectedClassFilter || stu.kelas;
-                                            const filteredAssignmentsForStu = assignmentsList.filter((a) => isAssignmentForClass(a, targetCls));
-                                            const filteredExamsForStu = examsList.filter((e) => isExamForClass(e, targetCls));
+                                            const isTargetedClass = (item: any, target: string) => {
+                                              if (!item) return false;
+                                              if (!target || target === "SEMUA_KELAS" || target === "ALL" || target.trim() === "") return true;
+                                              const cleanTarget = target.trim().toLowerCase();
+                                              if (Array.isArray(item.targets) && item.targets.some((t: any) => {
+                                                const k = (typeof t === "string" ? t : (t?.kelas || t?.name || "")).toString().trim().toLowerCase();
+                                                return k === cleanTarget || k === "semua_kelas" || k === "all" || k === "semua kelas";
+                                              })) return true;
+                                              if (Array.isArray(item.targetClasses) && item.targetClasses.some((k: any) => {
+                                                const cls = (k || "").toString().trim().toLowerCase();
+                                                return cls === cleanTarget || cls === "semua_kelas" || cls === "all" || cls === "semua kelas";
+                                              })) return true;
+                                              if (item.kelasRef && item.kelasRef.toString().toLowerCase().split(",").map((s:string)=>s.trim()).includes(cleanTarget)) return true;
+                                              if (item.kelas && item.kelas.toString().toLowerCase().split(",").map((s:string)=>s.trim()).includes(cleanTarget)) return true;
+                                              return false;
+                                            };
+
+                                            const targetCls = selectedClassFilter || stu.kelas;
+                                            const filteredAssignmentsForStu = assignmentsList.filter((a) => isTargetedClass(a, targetCls));
+                                            const filteredExamsForStu = examsList.filter((e) => isTargetedClass(e, targetCls));
 
                                             const mergedColsForStu = [
                                               ...filteredAssignmentsForStu.map((a) => ({
@@ -10176,6 +10320,7 @@ const targetCls = selectedClassFilter || stu.kelas;
         })}
         onDeleteColumn={handlePromptDeleteRekapColumn}
         onEditColumn={handleOpenEditColumnModal}
+        selectedClass={selectedClassFilter}
       />
 
       {/* Edit Rekap Column Modal */}
