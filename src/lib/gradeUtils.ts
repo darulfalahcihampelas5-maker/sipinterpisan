@@ -5,7 +5,7 @@
 
 export const isAssignmentForClass = (asg: any, targetClass?: string): boolean => {
   if (!asg) return false;
-  if (!targetClass || targetClass === "SEMUA_KELAS" || targetClass === "ALL" || targetClass.trim() === "") {
+  if (!targetClass || targetClass === "SEMUA_KELAS" || targetClass === "ALL" || targetClass === "Semua Kelas" || targetClass.trim() === "") {
     return true;
   }
 
@@ -33,16 +33,16 @@ export const isAssignmentForClass = (asg: any, targetClass?: string): boolean =>
   if (asg.kelasRef) {
     const rawRef = asg.kelasRef.toString().trim().toLowerCase();
     if (rawRef === "semua_kelas" || rawRef === "all" || rawRef === "semua kelas") return true;
-    const splitClasses = rawRef.split(",").map((s: string) => s.trim());
-    if (splitClasses.includes(cleanTarget)) return true;
+    const splitClasses = rawRef.split(",").map((s: string) => s.trim().toLowerCase());
+    if (splitClasses.includes(cleanTarget) || splitClasses.includes("semua_kelas") || splitClasses.includes("all") || splitClasses.includes("semua kelas")) return true;
   }
 
   // 4. kelas property fallback
   if (asg.kelas) {
     const rawKelas = asg.kelas.toString().trim().toLowerCase();
     if (rawKelas === "semua_kelas" || rawKelas === "all" || rawKelas === "semua kelas") return true;
-    const splitClasses = rawKelas.split(",").map((s: string) => s.trim());
-    if (splitClasses.includes(cleanTarget)) return true;
+    const splitClasses = rawKelas.split(",").map((s: string) => s.trim().toLowerCase());
+    if (splitClasses.includes(cleanTarget) || splitClasses.includes("semua_kelas") || splitClasses.includes("all") || splitClasses.includes("semua kelas")) return true;
   }
 
   return false;
@@ -50,7 +50,7 @@ export const isAssignmentForClass = (asg: any, targetClass?: string): boolean =>
 
 export const isExamForClass = (exam: any, targetClass?: string): boolean => {
   if (!exam) return false;
-  if (!targetClass || targetClass === "SEMUA_KELAS" || targetClass === "ALL" || targetClass.trim() === "") {
+  if (!targetClass || targetClass === "SEMUA_KELAS" || targetClass === "ALL" || targetClass === "Semua Kelas" || targetClass.trim() === "") {
     return true;
   }
 
@@ -78,16 +78,16 @@ export const isExamForClass = (exam: any, targetClass?: string): boolean => {
   if (exam.kelasRef) {
     const rawRef = exam.kelasRef.toString().trim().toLowerCase();
     if (rawRef === "semua_kelas" || rawRef === "all" || rawRef === "semua kelas") return true;
-    const splitClasses = rawRef.split(",").map((s: string) => s.trim());
-    if (splitClasses.includes(cleanTarget)) return true;
+    const splitClasses = rawRef.split(",").map((s: string) => s.trim().toLowerCase());
+    if (splitClasses.includes(cleanTarget) || splitClasses.includes("semua_kelas") || splitClasses.includes("all") || splitClasses.includes("semua kelas")) return true;
   }
 
   // 4. kelas property fallback
   if (exam.kelas) {
     const rawKelas = exam.kelas.toString().trim().toLowerCase();
     if (rawKelas === "semua_kelas" || rawKelas === "all" || rawKelas === "semua kelas") return true;
-    const splitClasses = rawKelas.split(",").map((s: string) => s.trim());
-    if (splitClasses.includes(cleanTarget)) return true;
+    const splitClasses = rawKelas.split(",").map((s: string) => s.trim().toLowerCase());
+    if (splitClasses.includes(cleanTarget) || splitClasses.includes("semua_kelas") || splitClasses.includes("all") || splitClasses.includes("semua kelas")) return true;
   }
 
   return false;

@@ -8038,25 +8038,8 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                       Nilai Kehadiran
                                     </th>
                                     {(() => {
-                                      const isTargetedClass = (item: any, target: string) => {
-                                        if (!item) return false;
-                                        if (!target || target === "SEMUA_KELAS" || target === "ALL" || target.trim() === "") return true;
-                                        const cleanTarget = target.trim().toLowerCase();
-                                        if (Array.isArray(item.targets) && item.targets.some((t: any) => {
-                                          const k = (typeof t === "string" ? t : (t?.kelas || t?.name || "")).toString().trim().toLowerCase();
-                                          return k === cleanTarget || k === "semua_kelas" || k === "all" || k === "semua kelas";
-                                        })) return true;
-                                        if (Array.isArray(item.targetClasses) && item.targetClasses.some((k: any) => {
-                                          const cls = (k || "").toString().trim().toLowerCase();
-                                          return cls === cleanTarget || cls === "semua_kelas" || cls === "all" || cls === "semua kelas";
-                                        })) return true;
-                                        if (item.kelasRef && item.kelasRef.toString().toLowerCase().split(",").map((s:string)=>s.trim()).includes(cleanTarget)) return true;
-                                        if (item.kelas && item.kelas.toString().toLowerCase().split(",").map((s:string)=>s.trim()).includes(cleanTarget)) return true;
-                                        return false;
-                                      };
-
-                                      const filteredAssignments = assignmentsList.filter((a) => isTargetedClass(a, selectedClassFilter));
-                                      const filteredExams = examsList.filter((e) => isTargetedClass(e, selectedClassFilter));
+                                      const filteredAssignments = assignmentsList.filter((a) => isAssignmentForClass(a, selectedClassFilter));
+                                      const filteredExams = examsList.filter((e) => isExamForClass(e, selectedClassFilter));
 
                                       const mergedCols = [
                                         ...filteredAssignments.map((a) => ({
@@ -8222,26 +8205,9 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                             })()}
                                           </td>
                                           {(() => {
-                                            const isTargetedClass = (item: any, target: string) => {
-                                              if (!item) return false;
-                                              if (!target || target === "SEMUA_KELAS" || target === "ALL" || target.trim() === "") return true;
-                                              const cleanTarget = target.trim().toLowerCase();
-                                              if (Array.isArray(item.targets) && item.targets.some((t: any) => {
-                                                const k = (typeof t === "string" ? t : (t?.kelas || t?.name || "")).toString().trim().toLowerCase();
-                                                return k === cleanTarget || k === "semua_kelas" || k === "all" || k === "semua kelas";
-                                              })) return true;
-                                              if (Array.isArray(item.targetClasses) && item.targetClasses.some((k: any) => {
-                                                const cls = (k || "").toString().trim().toLowerCase();
-                                                return cls === cleanTarget || cls === "semua_kelas" || cls === "all" || cls === "semua kelas";
-                                              })) return true;
-                                              if (item.kelasRef && item.kelasRef.toString().toLowerCase().split(",").map((s:string)=>s.trim()).includes(cleanTarget)) return true;
-                                              if (item.kelas && item.kelas.toString().toLowerCase().split(",").map((s:string)=>s.trim()).includes(cleanTarget)) return true;
-                                              return false;
-                                            };
-
                                             const targetCls = selectedClassFilter || stu.kelas;
-                                            const filteredAssignmentsForStu = assignmentsList.filter((a) => isTargetedClass(a, targetCls));
-                                            const filteredExamsForStu = examsList.filter((e) => isTargetedClass(e, targetCls));
+                                            const filteredAssignmentsForStu = assignmentsList.filter((a) => isAssignmentForClass(a, targetCls));
+                                            const filteredExamsForStu = examsList.filter((e) => isExamForClass(e, targetCls));
 
                                             const mergedColsForStu = [
                                               ...filteredAssignmentsForStu.map((a) => ({
