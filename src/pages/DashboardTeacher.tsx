@@ -1128,29 +1128,73 @@ export default function DashboardTeacher() {
         try {
           const batch = writeBatch(db);
           const now = new Date().toISOString();
+          const updatedFinalGrades = [...finalGradesList];
+          const updatedSubmissions = [...submissionsList];
 
-          pendingSubmissions.forEach((sub) => {
-            // 1. Create final grade
-            const gradeRef = doc(collection(db, "final_grades"));
-            batch.set(gradeRef, {
+          for (const sub of pendingSubmissions) {
+            const fgId = `${sub.assignmentId}_${sub.nisn || ""}`;
+            const asgObj = assignmentsList.find(a => a.id === sub.assignmentId);
+            const examObj = examsList.find(e => e.id === sub.assignmentId);
+            const colTitle = asgObj?.materi || asgObj?.title || examObj?.title || sub.materi || "Tugas";
+            const colBab = asgObj?.bab || examObj?.bab || "Informatika";
+
+            const fgData = {
+              id: fgId,
               assignmentId: sub.assignmentId,
+              examId: sub.assignmentId,
               nisn: sub.nisn || "",
+              studentName: sub.studentName || "",
+              kelas: sub.kelas || "",
               nilai: 100,
+              score: 100,
+              title: colTitle,
+              bab: colBab,
+              type: examObj ? "CBT" : (asgObj?.type || "Tugas"),
               gradedAt: now,
-            });
+              updatedAt: now,
+            };
 
-            // 2. Update submission
+            // 1. Create/Update final grade in Firestore
+            const gradeRef = doc(db, "final_grades", fgId);
+            batch.set(gradeRef, fgData, { merge: true });
+
+            // Sync to Supabase in parallel
+            try {
+              saveFinalGrade(fgData);
+            } catch (_) {}
+
+            // 2. Update submission in Firestore
             const subRef = doc(db, "submissions", sub.id);
-            batch.update(subRef, {
+            const subUpdate = {
               status: "sudah dinilai",
               nilai: 100,
               fileUrl: null,
-              keterangan: "Lulus Audit Massal (Buru-buru)",
+              keterangan: "Lulus Audit Massal",
               gradedAt: now,
-            });
-          });
+              updatedAt: now,
+            };
+            batch.update(subRef, subUpdate);
+
+            // Update in-memory collections
+            const fgIdx = updatedFinalGrades.findIndex(g => g.id === fgId || (g.assignmentId === sub.assignmentId && g.nisn === sub.nisn));
+            if (fgIdx >= 0) {
+              updatedFinalGrades[fgIdx] = { ...updatedFinalGrades[fgIdx], ...fgData };
+            } else {
+              updatedFinalGrades.push(fgData);
+            }
+
+            const subIdx = updatedSubmissions.findIndex(s => s.id === sub.id);
+            if (subIdx >= 0) {
+              updatedSubmissions[subIdx] = { ...updatedSubmissions[subIdx], ...subUpdate };
+            }
+          }
 
           await batch.commit();
+          setFinalGradesList(updatedFinalGrades);
+          setSubmissionsList(updatedSubmissions);
+          setLocalCache("firas_cache_final_grades", updatedFinalGrades);
+          setLocalCache("firas_cache_submissions", updatedSubmissions);
+
           trackUsage(0, pendingSubmissions.length * 2);
           showAlert(
             "Berhasil",
@@ -1189,49 +1233,101 @@ export default function DashboardTeacher() {
 
     setIsSavingGrade(true);
     try {
+      const now = new Date().toISOString();
       if (status === "sudah dinilai") {
         const fgId = `${selectedSubmission.assignmentId}_${selectedSubmission.nisn || ""}`;
-        // 1. Create/Update final grade entry with deterministic ID
+        const asgObj = assignmentsList.find(a => a.id === selectedSubmission.assignmentId);
+        const examObj = examsList.find(e => e.id === selectedSubmission.assignmentId);
+        const colTitle = asgObj?.materi || asgObj?.title || examObj?.title || selectedSubmission.materi || "Tugas";
+        const colBab = asgObj?.bab || examObj?.bab || "Informatika";
+
+        const fgData = {
+          id: fgId,
+          assignmentId: selectedSubmission.assignmentId,
+          examId: selectedSubmission.assignmentId,
+          nisn: selectedSubmission.nisn || "",
+          studentName: selectedSubmission.studentName || "",
+          kelas: selectedSubmission.kelas || "",
+          nilai: finalScore,
+          score: finalScore,
+          title: colTitle,
+          bab: colBab,
+          type: examObj ? "CBT" : (asgObj?.type || "Tugas"),
+          gradedAt: now,
+          updatedAt: now,
+        };
+
+        // 1. Create/Update final grade in Firestore
         await setDoc(
           doc(db, "final_grades", fgId),
-          {
-            id: fgId,
-            assignmentId: selectedSubmission.assignmentId,
-            nisn: selectedSubmission.nisn || "",
-            nilai: finalScore,
-            gradedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
+          fgData,
           { merge: true },
         );
 
+        // Save to Supabase
+        try {
+          await saveFinalGrade(fgData);
+        } catch (supaErr) {
+          console.warn("Supabase final grade save warning:", supaErr);
+        }
+
         // 2. Update submission entry: update status, nilai, remove fileUrl to save space
+        const subUpdateData = {
+          status: "sudah dinilai",
+          nilai: finalScore,
+          fileUrl: null, // Clear large image data to optimize storage
+          keterangan: feedbackReason || "",
+          gradedAt: now,
+          updatedAt: now,
+        };
         await setDoc(
           doc(db, "submissions", selectedSubmission.id),
-          {
-            status: "sudah dinilai",
-            nilai: finalScore,
-            fileUrl: null, // Clear large image data to optimize storage
-            keterangan: feedbackReason || "",
-            gradedAt: new Date().toISOString(),
-          },
+          subUpdateData,
           { merge: true },
         );
+
+        // 3. Immediately update in-memory state
+        setFinalGradesList((prev) => {
+          const idx = prev.findIndex(
+            (g) => g.id === fgId || (g.assignmentId === selectedSubmission.assignmentId && g.nisn === selectedSubmission.nisn)
+          );
+          const updated = idx >= 0
+            ? prev.map((item, i) => (i === idx ? { ...item, ...fgData } : item))
+            : [fgData, ...prev];
+          setLocalCache("firas_cache_final_grades", updated);
+          return updated;
+        });
+
+        setSubmissionsList((prev) => {
+          const updated = prev.map((s) => (s.id === selectedSubmission.id ? { ...s, ...subUpdateData } : s));
+          setLocalCache("firas_cache_submissions", updated);
+          return updated;
+        });
+
         trackUsage(0, 2);
         showAlert("Berhasil", `Nilai ${finalScore} berhasil disimpan dan diterbitkan untuk siswa.`, "alert");
       } else {
         // Update submission status for rejection
+        const subRejectData = {
+          status: "ditolak",
+          nilai: null,
+          keterangan: feedbackReason.trim(),
+          wasRejected: true,
+          gradedAt: now,
+          updatedAt: now,
+        };
         await setDoc(
           doc(db, "submissions", selectedSubmission.id),
-          {
-            status: "ditolak",
-            nilai: null,
-            keterangan: feedbackReason.trim(),
-            wasRejected: true,
-            gradedAt: new Date().toISOString(),
-          },
+          subRejectData,
           { merge: true },
         );
+
+        setSubmissionsList((prev) => {
+          const updated = prev.map((s) => (s.id === selectedSubmission.id ? { ...s, ...subRejectData } : s));
+          setLocalCache("firas_cache_submissions", updated);
+          return updated;
+        });
+
         trackUsage(0, 1);
         showAlert("Tugas Ditolak", "Status penolakan & catatan revisi berhasil dikirim ke siswa.", "alert");
       }
@@ -1240,7 +1336,6 @@ export default function DashboardTeacher() {
       setSelectedSubmission(null);
       localStorage.removeItem("firas_cache_submissions");
       localStorage.removeItem("firas_cache_final_grades");
-      fetchTeacherData(false);
     } catch (error) {
       handleFirestoreError(
         error,
@@ -3131,11 +3226,23 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
 
     const validAssignments = assignmentsList.filter((a) => isAssignmentForClass(a, targetClass));
     validAssignments.forEach((a) => {
-      const sub = submissionsList.find((s) => s.assignmentId === a.id && s.nisn === stu.nisn);
-      const fGrade = finalGradesList.find((f) => f.assignmentId === a.id && f.nisn === stu.nisn);
+      const sub = submissionsList.find(
+        (s) => (s.assignmentId === a.id || s.id === `SUB-${stu.nisn}-${a.id}`) && (s.nisn === stu.nisn || s.nis === stu.nisn)
+      );
+      const fGrade = finalGradesList.find(
+        (f) =>
+          (f.assignmentId === a.id || f.examId === a.id || f.id === `${a.id}_${stu.nisn}`) &&
+          (f.nisn === stu.nisn || f.nis === stu.nisn)
+      );
       const cellKey = `${a.id}_${stu.nisn}`;
       const isEdited = editedRekapGrades[cellKey] !== undefined;
-      const val = isEdited ? editedRekapGrades[cellKey] : (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" ? sub.nilai : fGrade?.nilai);
+      const val = isEdited
+        ? editedRekapGrades[cellKey]
+        : (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" && sub?.status === "sudah dinilai"
+            ? sub.nilai
+            : (fGrade?.nilai !== undefined && fGrade?.nilai !== null && fGrade?.nilai !== ""
+                ? fGrade.nilai
+                : (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" ? sub.nilai : "")));
       if (val !== undefined && val !== null && val !== "") {
         tugasVals.push(Number(val));
       } else {
@@ -3146,11 +3253,13 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
     const validExams = examsList.filter((e) => isExamForClass(e, targetClass));
     validExams.forEach((e) => {
       const fGrade = finalGradesList.find(
-        (f) => (f.alignmentId === e.id || f.assignmentId === e.id) && f.nisn === stu.nisn
+        (f) =>
+          (f.alignmentId === e.id || f.assignmentId === e.id || f.examId === e.id || f.id === `${e.id}_${stu.nisn}`) &&
+          (f.nisn === stu.nisn || f.nis === stu.nisn)
       );
       const cellKey = `${e.id}_${stu.nisn}`;
       const isEdited = editedRekapGrades[cellKey] !== undefined;
-      const val = isEdited ? editedRekapGrades[cellKey] : fGrade?.nilai;
+      const val = isEdited ? editedRekapGrades[cellKey] : (fGrade?.nilai ?? fGrade?.score);
       if (val !== undefined && val !== null && val !== "") {
         const n = Number(val);
         if (e.category === "Penilaian Tengah Semester") utsVal = n;
@@ -3288,11 +3397,26 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
         // List each evaluation's grade
         const gradesCols = sortedEvaluations.map((evalItem) => {
           const fg = finalGradesList.find(
-            (f) => (f.assignmentId === evalItem.id || f.alignmentId === evalItem.id) && f.nisn === stu.nisn
+            (f) =>
+              (f.assignmentId === evalItem.id || f.examId === evalItem.id || f.alignmentId === evalItem.id || f.id === `${evalItem.id}_${stu.nisn}`) &&
+              (f.nisn === stu.nisn || f.nis === stu.nisn)
           );
-          const sub = submissionsList.find((s) => s.assignmentId === evalItem.id && s.nisn === stu.nisn);
-          const val = sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" ? sub.nilai : fg?.nilai;
-          return val !== undefined && val !== null && val !== "" ? val.toString() : "0";
+          const sub = submissionsList.find(
+            (s) => (s.assignmentId === evalItem.id || s.id === `SUB-${stu.nisn}-${evalItem.id}`) && (s.nisn === stu.nisn || s.nis === stu.nisn)
+          );
+          const cellKey = `${evalItem.id}_${stu.nisn}`;
+          const isEdited = editedRekapGrades[cellKey] !== undefined;
+
+          const val = isEdited
+            ? editedRekapGrades[cellKey]
+            : (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" && sub?.status === "sudah dinilai"
+                ? sub.nilai
+                : (fg?.nilai !== undefined && fg?.nilai !== null && fg?.nilai !== ""
+                    ? fg.nilai
+                    : (fg?.score !== undefined && fg?.score !== null && fg?.score !== ""
+                        ? fg.score
+                        : (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" ? sub.nilai : ""))));
+          return val !== undefined && val !== null && val !== "" ? val.toString() : "-";
         });
 
         // Calculate Nilai Rapor
@@ -3794,10 +3918,27 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
         const presenceScore = total > 0 ? persentase : 100; // TANPA %
 
         const gradesCols = sortedEvaluations.map((ev) => {
-          const fg = finalGradesList.find((g) => g.nisn === stu.nisn && (g.assignmentId === ev.id || g.alignmentId === ev.id));
-          const sub = submissionsList.find((s) => s.assignmentId === ev.id && s.nisn === stu.nisn);
-          const val = sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" ? sub.nilai : fg?.nilai;
-          return val !== undefined && val !== null && val !== "" ? Number(val) : 0;
+          const fg = finalGradesList.find(
+            (g) =>
+              (g.nisn === stu.nisn || g.nis === stu.nisn) &&
+              (g.assignmentId === ev.id || g.examId === ev.id || g.alignmentId === ev.id || g.id === `${ev.id}_${stu.nisn}`)
+          );
+          const sub = submissionsList.find(
+            (s) => (s.assignmentId === ev.id || s.id === `SUB-${stu.nisn}-${ev.id}`) && (s.nisn === stu.nisn || s.nis === stu.nisn)
+          );
+          const cellKey = `${ev.id}_${stu.nisn}`;
+          const isEdited = editedRekapGrades[cellKey] !== undefined;
+
+          const val = isEdited
+            ? editedRekapGrades[cellKey]
+            : (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" && sub?.status === "sudah dinilai"
+                ? sub.nilai
+                : (fg?.nilai !== undefined && fg?.nilai !== null && fg?.nilai !== ""
+                    ? fg.nilai
+                    : (fg?.score !== undefined && fg?.score !== null && fg?.score !== ""
+                        ? fg.score
+                        : (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" ? sub.nilai : ""))));
+          return val !== undefined && val !== null && val !== "" ? Number(val) : "-";
         });
 
         const studentGrades = finalGradesList.filter((fg) => fg.nisn === stu.nisn);
@@ -8222,31 +8363,45 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                               ? isAssignmentForClass(col.rawDoc || col, stu.kelas)
                                               : isExamForClass(col.rawDoc || col, stu.kelas);
 
-                                            let score = "";
+                                            let score: any = "";
+                                            // 1. Check finalGradesList (primary source for finalized scores)
+                                            const fGrade = finalGradesList.find(
+                                              (f) =>
+                                                (f.nisn === stu.nisn || f.nis === stu.nisn) &&
+                                                (f.assignmentId === col.id ||
+                                                  f.examId === col.id ||
+                                                  f.alignmentId === col.id ||
+                                                  f.id === `${col.id}_${stu.nisn}`)
+                                            );
+
+                                            // 2. Check submissionsList
+                                            const sub = studentSubs.find(
+                                              (s) => s.assignmentId === col.id || s.id === `SUB-${stu.nisn}-${col.id}`
+                                            );
+
                                             if (col.type === "assignment") {
-                                              const sub = studentSubs.find(
-                                                (s) => s.assignmentId === col.id
-                                              );
-                                              const fGrade = finalGradesList.find(
-                                                (f) =>
-                                                  f.assignmentId === col.id &&
-                                                  f.nisn === stu.nisn
-                                              );
-                                              score = sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" ? sub.nilai : (fGrade?.nilai ?? "");
+                                              if (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" && sub?.status === "sudah dinilai") {
+                                                score = sub.nilai;
+                                              } else if (fGrade?.nilai !== undefined && fGrade?.nilai !== null && fGrade?.nilai !== "") {
+                                                score = fGrade.nilai;
+                                              } else if (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "") {
+                                                score = sub.nilai;
+                                              }
                                             } else {
-                                              const fGrade = finalGradesList.find(
-                                                (f) =>
-                                                  (f.assignmentId === col.id || f.alignmentId === col.id) &&
-                                                  f.nisn === stu.nisn
-                                              );
-                                              score = fGrade?.nilai !== undefined && fGrade?.nilai !== null && fGrade?.nilai !== "" ? fGrade.nilai : "";
+                                              if (fGrade?.nilai !== undefined && fGrade?.nilai !== null && fGrade?.nilai !== "") {
+                                                score = fGrade.nilai;
+                                              } else if (fGrade?.score !== undefined && fGrade?.score !== null && fGrade?.score !== "") {
+                                                score = fGrade.score;
+                                              } else if (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "") {
+                                                score = sub.nilai;
+                                              }
                                             }
 
                                             const cellKey = `${col.id}_${stu.nisn}`;
                                             const isEdited = editedRekapGrades[cellKey] !== undefined;
                                             const activeScoreStr = isEdited
                                               ? editedRekapGrades[cellKey]
-                                              : (score !== undefined && score !== null ? String(score) : "");
+                                              : (score !== undefined && score !== null && score !== "" ? String(score) : "");
 
                                             if (activeScoreStr !== "") {
                                               totalScore += Number(activeScoreStr);
@@ -8285,13 +8440,13 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                                     className="group/cell w-full h-full inline-flex items-center justify-center gap-1 hover:text-[#85cc00] cursor-pointer"
                                                     title="Klik untuk mengedit nilai pada tabel"
                                                   >
-                                                    {activeScoreStr ? (
+                                                    {activeScoreStr !== "" && activeScoreStr !== undefined && activeScoreStr !== null ? (
                                                       <span className={`text-sm font-mono font-black ${isEdited ? "text-amber-800" : "text-slate-900"}`}>
                                                         {activeScoreStr}
                                                       </span>
                                                     ) : (
-                                                      <span className={`text-sm font-mono font-black ${isEdited ? "text-amber-800" : "text-slate-500"}`}>
-                                                        0
+                                                      <span className={`text-sm font-mono font-medium ${isEdited ? "text-amber-800" : "text-slate-300"}`}>
+                                                        -
                                                       </span>
                                                     )}
                                                   </button>

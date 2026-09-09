@@ -128,15 +128,17 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                   <div className="space-y-4">
                     {studentAssignments.map((asg, idx) => {
                       const sub = studentSubmissions.find(
-                        (s) => s.assignmentId === asg.id
+                        (s) => (s.assignmentId === asg.id || s.id === `SUB-${selectedStudentProfile.nisn}-${asg.id}`)
                       );
                       const finalGrade = finalGradesList.find(
                         (fg) =>
-                          fg.assignmentId === asg.id &&
-                          fg.nisn === selectedStudentProfile.nisn
+                          (fg.nisn === selectedStudentProfile.nisn || fg.nis === selectedStudentProfile.nisn) &&
+                          (fg.assignmentId === asg.id || fg.examId === asg.id || fg.id === `${asg.id}_${selectedStudentProfile.nisn}`)
                       );
 
-                      const score = sub?.nilai ?? finalGrade?.nilai;
+                      const score = (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" && sub?.status === "sudah dinilai")
+                        ? sub.nilai
+                        : (finalGrade?.nilai ?? finalGrade?.score ?? (sub?.nilai !== undefined && sub?.nilai !== null && sub?.nilai !== "" ? sub.nilai : undefined));
 
                       return (
                         <div
@@ -216,11 +218,11 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
                     {studentExams.map((exam, idx) => {
                       const finalGrade = finalGradesList.find(
                         (fg) =>
-                          fg.assignmentId === exam.id &&
-                          fg.nisn === selectedStudentProfile.nisn
+                          (fg.nisn === selectedStudentProfile.nisn || fg.nis === selectedStudentProfile.nisn) &&
+                          (fg.assignmentId === exam.id || fg.examId === exam.id || fg.alignmentId === exam.id || fg.id === `${exam.id}_${selectedStudentProfile.nisn}`)
                       );
 
-                      const score = finalGrade?.nilai;
+                      const score = finalGrade?.nilai ?? finalGrade?.score;
                       const kkm = exam.kkm || 75;
                       const hasPassed = score !== undefined && score >= kkm;
                       const violationCount = finalGrade?.violationCount || 0;
