@@ -7889,10 +7889,10 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                             )}
                           </div>
 
-                          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl shadow-slate-200/40 p-3 overflow-hidden">
-                             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-6 p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-[2rem]">
+                          <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-2xl shadow-slate-200/40 p-3 sm:p-4 overflow-hidden">
+                             <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-5 mb-6 p-4 sm:p-6 border-b border-slate-100 bg-slate-50/70 rounded-t-[2rem]">
                                {/* Left Controls: Class filter and Student search */}
-                               <div className="flex flex-col sm:flex-row gap-4 w-full md:max-w-xl">
+                               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full xl:max-w-xl">
                                  {/* Dropdown Kelas */}
                                  <div className="flex-1 space-y-1.5">
                                    <label className="text-[10px] font-black uppercase tracking-wider text-slate-400 block ml-1">
@@ -7902,7 +7902,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                      <select
                                        value={selectedClassFilter}
                                        onChange={(e) => setSelectedClassFilter(e.target.value)}
-                                       className="block w-full rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-900 focus:border-[#85cc00] focus:ring-2 focus:ring-[#85cc00]/10 transition-all outline-none appearance-none cursor-pointer"
+                                       className="block w-full rounded-xl bg-white border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-900 focus:border-[#85cc00] focus:ring-2 focus:ring-[#85cc00]/10 transition-all outline-none appearance-none cursor-pointer shadow-sm"
                                      >
                                        <option value="">Semua Kelas</option>
                                        {classesList.map((c, idx) => (
@@ -7928,7 +7928,7 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                        placeholder="Cari nama atau NIS..."
                                        value={studentSearchQuery}
                                        onChange={(e) => setStudentSearchQuery(e.target.value)}
-                                       className="block w-full rounded-xl bg-white border border-slate-200 pl-10 pr-8 py-2.5 text-xs font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-semibold focus:border-[#85cc00] focus:ring-2 focus:ring-[#85cc00]/10 transition-all outline-none"
+                                       className="block w-full rounded-xl bg-white border border-slate-200 pl-10 pr-8 py-2.5 text-xs font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-semibold focus:border-[#85cc00] focus:ring-2 focus:ring-[#85cc00]/10 transition-all outline-none shadow-sm"
                                      />
                                      <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-hover:text-[#85cc00] transition-colors">
                                        <Search className="w-4 h-4" />
@@ -7945,54 +7945,68 @@ _Laporan dikirim secara berkala oleh Wali Kelas untuk memantau aktivitas & prest
                                  </div>
                                </div>
 
-                               {/* Right Controls: Export Buttons */}
-                               <div className="flex flex-wrap items-center gap-3 shrink-0">
+                               {/* Right Controls: Action & Export Buttons with responsive wrap */}
+                               <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto xl:justify-end">
+                                 {/* Column & Edit Tools */}
                                  <button
                                    onClick={() => setIsAddManualColumnOpen(true)}
-                                   className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all flex items-center gap-2 active:scale-95 shadow-md shadow-indigo-600/20 cursor-pointer"
+                                   className="px-3.5 py-2.5 bg-indigo-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-indigo-700 transition-all flex items-center gap-1.5 active:scale-95 shadow-md shadow-indigo-600/20 cursor-pointer"
                                  >
-                                   <Plus className="w-4 h-4"/>
-                                   Tambah Kolom Nilai
+                                   <Plus className="w-3.5 h-3.5"/>
+                                   <span>Tambah Kolom</span>
                                  </button>
                                  <button
                                    onClick={() => handleOpenEditColumnModal()}
-                                   className="px-4 py-2.5 bg-amber-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-amber-700 transition-all flex items-center gap-2 active:scale-95 shadow-md shadow-amber-600/20 cursor-pointer"
+                                   className="px-3.5 py-2.5 bg-amber-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-amber-700 transition-all flex items-center gap-1.5 active:scale-95 shadow-md shadow-amber-600/20 cursor-pointer"
                                    title="Edit Identitas Kolom Penilaian (Judul, Jenis, Tanggal, Bab, Kelas)"
                                  >
-                                   <Pencil className="w-4 h-4"/>
-                                   Edit Kolom
+                                   <Pencil className="w-3.5 h-3.5"/>
+                                   <span>Edit Kolom</span>
                                  </button>
-                                  <button
-                                    onClick={() => setIsDeleteColumnModalOpen(true)}
-                                    className="px-4 py-2.5 bg-rose-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-rose-700 transition-all flex items-center gap-2 active:scale-95 shadow-md shadow-rose-600/20 cursor-pointer"
-                                    title="Kelola & Hapus Kolom Penilaian"
-                                  >
-                                    <Trash2 className="w-4 h-4"/>
-                                    Hapus Kolom
-                                  </button>
+                                 <button
+                                   onClick={() => setIsDeleteColumnModalOpen(true)}
+                                   className="px-3.5 py-2.5 bg-rose-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider hover:bg-rose-700 transition-all flex items-center gap-1.5 active:scale-95 shadow-md shadow-rose-600/20 cursor-pointer"
+                                   title="Kelola & Hapus Kolom Penilaian"
+                                 >
+                                   <Trash2 className="w-3.5 h-3.5"/>
+                                   <span>Hapus Kolom</span>
+                                 </button>
                                  <button
                                    onClick={() => setIsEditingRekapTable(!isEditingRekapTable)}
-                                   className={`px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 active:scale-95 shadow-md cursor-pointer ${
+                                   className={`px-3.5 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 active:scale-95 shadow-md cursor-pointer ${
                                      isEditingRekapTable
                                        ? "bg-amber-500 text-white hover:bg-amber-600 shadow-amber-500/20"
                                        : "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-600/20"
                                    }`}
                                  >
-                                   <Edit className="w-4 h-4"/>
-                                   {isEditingRekapTable ? "Selesai Edit" : "Edit Nilai Tabel"}
+                                   <Edit className="w-3.5 h-3.5"/>
+                                   <span>{isEditingRekapTable ? "Selesai Edit" : "Edit Nilai"}</span>
                                  </button>
-                                 <button onClick={handleDownloadExcel} className="px-6 py-2.5 bg-[#85cc00] text-slate-950 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:brightness-110 transition-all flex items-center gap-2.5 active:scale-95 shadow-lg shadow-[#85cc00]/20">
-                                   <Download className="w-4 h-4"/> 
-                                   Export Excel
-                                 </button>
-                                 <button onClick={handlePreviewNilaiPDF} className="px-4 py-2.5 bg-sky-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-sky-700 transition-all flex items-center gap-2 active:scale-95 shadow-md shadow-sky-600/20">
-                                   <Eye className="w-4 h-4"/> 
-                                   Preview PDF
-                                 </button>
-                                 <button onClick={handleDownloadPDF} className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-[#85cc00] hover:text-slate-900 transition-all flex items-center gap-2 active:scale-95 shadow-md shadow-slate-900/10">
-                                   <FileText className="w-4 h-4"/> 
-                                   Ekspor PDF
-                                 </button>
+
+                                 {/* Export Actions - prominently styled & wrapped */}
+                                 <div className="flex flex-wrap items-center gap-2">
+                                   <button 
+                                     onClick={handleDownloadExcel} 
+                                     className="px-4 py-2.5 bg-[#85cc00] text-slate-950 rounded-xl text-[10px] font-extrabold uppercase tracking-wider hover:brightness-110 transition-all flex items-center gap-1.5 active:scale-95 shadow-md shadow-[#85cc00]/20 cursor-pointer"
+                                   >
+                                     <Download className="w-3.5 h-3.5"/> 
+                                     <span>Excel</span>
+                                   </button>
+                                   <button 
+                                     onClick={handlePreviewNilaiPDF} 
+                                     className="px-4 py-2.5 bg-sky-600 text-white rounded-xl text-[10px] font-extrabold uppercase tracking-wider hover:bg-sky-700 transition-all flex items-center gap-1.5 active:scale-95 shadow-md shadow-sky-600/20 cursor-pointer"
+                                   >
+                                     <Eye className="w-3.5 h-3.5"/> 
+                                     <span>Preview PDF</span>
+                                   </button>
+                                   <button 
+                                     onClick={handleDownloadPDF} 
+                                     className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-extrabold uppercase tracking-wider hover:bg-[#85cc00] hover:text-slate-900 transition-all flex items-center gap-1.5 active:scale-95 shadow-md shadow-slate-900/10 cursor-pointer"
+                                   >
+                                     <FileText className="w-3.5 h-3.5"/> 
+                                     <span>Ekspor PDF</span>
+                                   </button>
+                                 </div>
                                </div>
                              </div>
 
